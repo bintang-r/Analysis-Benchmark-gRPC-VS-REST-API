@@ -1,0 +1,1823 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description"
+        content="Dashboard Interaktif Analisis Benchmark Performa Komunikasi gRPC vs REST API pada Arsitektur Microservices. Studi kasus menggunakan NestJS dan Docker.">
+    <meta name="author" content="Muhammad Bintang">
+    <title>Benchmark gRPC vs REST API - Microservices Performance Dashboard</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Outfit:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <!-- Tailwind CSS Play CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Outfit', 'sans-serif'],
+                        mono: ['Fira Code', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            main: '#060913',
+                            card: 'rgba(16, 23, 42, 0.65)',
+                            'card-hover': 'rgba(22, 32, 58, 0.8)',
+                            border: 'rgba(255, 255, 255, 0.08)',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Chart.js via CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* Specific animations and styling not easily doable in Tailwind utility classes */
+        .bg-glow {
+            filter: blur(140px);
+            pointer-events: none;
+            opacity: 0.12;
+        }
+
+        .status-pulse {
+            animation: statusPulse 2s infinite;
+        }
+
+        @keyframes statusPulse {
+            0% {
+                opacity: 0.4;
+            }
+
+            50% {
+                opacity: 1;
+            }
+
+            100% {
+                opacity: 0.4;
+            }
+        }
+
+        /* Custom scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #060913;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        /* Packet flows in SVG */
+        .packet {
+            pointer-events: none;
+        }
+
+        .rest-packet {
+            filter: drop-shadow(0 0 4px #ff5e62);
+        }
+
+        .grpc-packet {
+            filter: drop-shadow(0 0 4px #00f2fe);
+        }
+
+        /* SVG Node pulsing animations */
+        @keyframes pulse-rest {
+            0% { stroke-width: 1.5; stroke: #e11d48; }
+            50% { stroke-width: 5; stroke: #ff5e62; filter: drop-shadow(0 0 8px #ff5e62); }
+            100% { stroke-width: 1.5; stroke: #e11d48; }
+        }
+        @keyframes pulse-grpc {
+            0% { stroke-width: 1.5; stroke: #06b6d4; }
+            50% { stroke-width: 5; stroke: #22d3ee; filter: drop-shadow(0 0 8px #22d3ee); }
+            100% { stroke-width: 1.5; stroke: #06b6d4; }
+        }
+        @keyframes pulse-db {
+            0% { stroke-width: 1; stroke: #475569; }
+            50% { stroke-width: 4; stroke: #fbbf24; filter: drop-shadow(0 0 8px #fbbf24); }
+            100% { stroke-width: 1; stroke: #475569; }
+        }
+        .pulse-rest { animation: pulse-rest 0.3s ease-in-out; }
+        .pulse-grpc { animation: pulse-grpc 0.3s ease-in-out; }
+        .pulse-db { animation: pulse-db 0.3s ease-in-out; }
+
+        /* Payload glowing classes */
+        .glow-active-rest {
+            box-shadow: 0 0 15px rgba(244, 63, 94, 0.35);
+            border-color: rgba(244, 63, 94, 0.5) !important;
+        }
+        .glow-active-grpc {
+            box-shadow: 0 0 15px rgba(6, 182, 212, 0.35);
+            border-color: rgba(6, 182, 212, 0.5) !important;
+        }
+    </style>
+</head>
+
+<body
+    class="bg-slate-950 text-slate-100 font-sans min-h-screen relative overflow-x-hidden selection:bg-cyan-500/30 selection:text-cyan-200">
+    <!-- Background Glow Effects -->
+    <div
+        class="bg-glow absolute top-[-200px] left-[-200px] w-[600px] h-[600px] rounded-full bg-radial from-cyan-400 to-transparent z-[-1]">
+    </div>
+    <div
+        class="bg-glow absolute bottom-[-200px] right-[-200px] w-[600px] h-[600px] rounded-full bg-radial from-rose-500 to-transparent z-[-1]">
+    </div>
+
+    <div class="flex min-h-screen">
+        <!-- Sidebar Navigation -->
+        <aside
+            class="w-64 bg-slate-900/80 backdrop-blur-xl border-r border-slate-800 flex flex-col p-6 fixed h-screen z-10">
+            <div class="flex items-center gap-3 mb-10">
+                <div
+                    class="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center text-slate-950 shadow-lg shadow-cyan-500/20">
+                    <svg class="w-6 h-6" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,4A8,8 0 0,1 20,12C20,14.4 19,16.6 17.2,18.2L15.8,16.8C17.2,15.6 18,13.9 18,12A6,6 0 0,0 12,6V4M12,8A4,4 0 0,1 16,12C16,13.3 15.4,14.4 14.4,15.1L13,13.7C13.6,13.3 14,12.7 14,12A2,2 0 0,0 12,10V8M12,12A0,0 0 0,1 12,12V12A2,2 0 0,0 12,12Z" />
+                    </svg>
+                </div>
+                <span
+                    class="text-xl font-bold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">MicroBench</span>
+            </div>
+
+            <nav class="flex flex-col gap-1.5 flex-1">
+                <button
+                    class="nav-item flex items-center gap-3.5 px-4 py-3.5 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent transition-all active"
+                    data-target="section-dashboard" id="btn-nav-dashboard">
+                    <svg class="w-5 h-5" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M13,3V9H21V3H13M13,21H21V11H13V21M3,21H11V15H3V21M3,13H11V3H3V13Z" />
+                    </svg>
+                    <span>Dashboard Metrik</span>
+                </button>
+                <button
+                    class="nav-item flex items-center gap-3.5 px-4 py-3.5 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent transition-all"
+                    data-target="section-simulator" id="btn-nav-simulator">
+                    <svg class="w-5 h-5" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,4A8,8 0 0,1 20,12C20,14.8 18.5,17.3 16.2,18.7L14.8,17.2C16.8,16.1 18,14.2 18,12C18,8.7 15.3,6 12,6C8.7,6 6,8.7 6,12C6,14.2 7.2,16.1 9.2,17.2L7.8,18.7C5.5,17.3 4,14.8 4,12A8,8 0 0,1 12,4M12,8A4,4 0 0,1 16,12C16,13.3 15.1,14.5 13.9,14.8L12.5,13.4C13.4,13.1 14,12.3 14,11.3A2,2 0 0,0 12,9.3C10.9,9.3 10,10.2 10,11.3C10,12.3 10.6,13.1 11.5,13.4L10.1,14.8C8.9,14.5 8,13.3 8,12A4,4 0 0,1 12,8Z" />
+                    </svg>
+                    <span>Simulasi</span>
+                </button>
+                <button
+                    class="nav-item flex items-center gap-3.5 px-4 py-3.5 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent transition-all"
+                    data-target="section-paper" id="btn-nav-paper">
+                    <svg class="w-5 h-5" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M19,3H5C3.89,3 3,3.89 3,5V19C3,20.1 3.89,21 5,21H19C20.1,21 21,20.1 21,19V5C21,3.89 20.1,3 19,3M19,5V19H5V5H19M7,7V9H17V7H7M7,11V13H17V11H7M7,15V17H14V15H7Z" />
+                    </svg>
+                    <span>Dokumen Paper</span>
+                </button>
+                <button
+                    class="nav-item flex items-center gap-3.5 px-4 py-3.5 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent transition-all"
+                    data-target="section-code" id="btn-nav-code">
+                    <svg class="w-5 h-5" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M14.6,16.6L19.2,12L14.6,7.4L16,6L22,12L16,18L14.6,16.6M9.4,16.6L4.8,12L9.4,7.4L8,6L2,12L8,18L9.4,16.6Z" />
+                    </svg>
+                    <span>Eksplorasi Kode</span>
+                </button>
+            </nav>
+
+            <div class="pt-4 border-t border-slate-800/80">
+                <p class="text-sm font-semibold text-slate-200">Muhammad Bintang</p>
+                <p class="text-xs text-slate-500">Universitas Teknologi Akba</p>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="flex-1 ml-64 p-8 overflow-y-auto max-w-[calc(100vw-16rem)]">
+            <!-- Top Header -->
+            <header class="flex justify-between items-center pb-6 mb-8 border-b border-slate-800/80">
+                <div>
+                    <h1
+                        class="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
+                        Benchmark gRPC vs REST API</h1>
+                    <p class="text-slate-400 text-sm mt-1">Analisis Performa Komunikasi pada Arsitektur Microservices
+                    </p>
+                </div>
+                <div
+                    class="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 px-4 py-2 rounded-full text-emerald-400 text-xs font-semibold">
+                    <span
+                        class="w-2.5 h-2.5 rounded-full bg-emerald-500 status-pulse shadow-lg shadow-emerald-500/30"></span>
+                    <span>NestJS & Docker Environment</span>
+                </div>
+            </header>
+
+            <!-- SECTION 1: DASHBOARD -->
+            <section id="section-dashboard" class="content-section block">
+                <div class="text-slate-400 text-base mb-6 max-w-4xl">
+                    Hasil pengujian benchmark performa transmisi data REST API (HTTP/1.1 JSON) dibandingkan gRPC (HTTP/2
+                    Protocol Buffers) pada berbagai tingkat konkurensi request.
+                </div>
+
+                <!-- Parameters Controller (Editable) -->
+                <div class="bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-2xl p-6 shadow-xl mb-8">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-base font-bold text-slate-100 flex items-center gap-2">
+                            <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z">
+                                </path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                            </svg>
+                            Kustomisasi Parameter Benchmark (Dapat Diubah)
+                        </h3>
+                        <span class="text-xs text-slate-400 italic">Mengubah nilai input akan langsung memperbarui
+                            grafik di bawah dan simulasi</span>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse text-xs">
+                            <thead>
+                                <tr class="border-b border-slate-800 text-slate-400 font-medium">
+                                    <th class="py-2.5 px-3">Req (Concurrent)</th>
+                                    <th class="py-2.5 px-3 text-rose-400 bg-rose-500/5">REST Latency (ms)</th>
+                                    <th class="py-2.5 px-3 text-cyan-400 bg-cyan-500/5">gRPC Latency (ms)</th>
+                                    <th class="py-2.5 px-3 text-rose-400 bg-rose-500/5">REST Throughput (req/s)</th>
+                                    <th class="py-2.5 px-3 text-cyan-400 bg-cyan-500/5">gRPC Throughput (req/s)</th>
+                                    <th class="py-2.5 px-3 text-rose-400 bg-rose-500/5">REST CPU (%)</th>
+                                    <th class="py-2.5 px-3 text-cyan-400 bg-cyan-500/5">gRPC CPU (%)</th>
+                                    <th class="py-2.5 px-3 text-rose-400 bg-rose-500/5">REST Memory (MB)</th>
+                                    <th class="py-2.5 px-3 text-cyan-400 bg-cyan-500/5">gRPC Memory (MB)</th>
+                                </tr>
+                            </thead>
+                            <tbody class="text-slate-300 divider-y divider-slate-800/40">
+                                <!-- 100 Req -->
+                                <tr class="hover:bg-slate-800/20 transition-all">
+                                    <td class="py-3 px-3 font-semibold text-slate-400">100</td>
+                                    <td class="py-2 px-2 bg-rose-500/5"><input id="p-rest-rt-100" type="number"
+                                            class="w-20 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30 focus:outline-none"
+                                            value="120"></td>
+                                    <td class="py-2 px-2 bg-cyan-500/5"><input id="p-grpc-rt-100" type="number"
+                                            class="w-20 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/30 focus:outline-none"
+                                            value="80"></td>
+                                    <td class="py-2 px-2 bg-rose-500/5"><input id="p-rest-tp-100" type="number"
+                                            class="w-20 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30 focus:outline-none"
+                                            value="850"></td>
+                                    <td class="py-2 px-2 bg-cyan-500/5"><input id="p-grpc-tp-100" type="number"
+                                            class="w-20 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/30 focus:outline-none"
+                                            value="1200"></td>
+                                    <td class="py-2 px-2 bg-rose-500/5"><input id="p-rest-cpu-100" type="number"
+                                            class="w-20 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30 focus:outline-none"
+                                            value="45"></td>
+                                    <td class="py-2 px-2 bg-cyan-500/5"><input id="p-grpc-cpu-100" type="number"
+                                            class="w-20 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/30 focus:outline-none"
+                                            value="30"></td>
+                                    <td class="py-2 px-2 bg-rose-500/5"><input id="p-rest-mem-100" type="number"
+                                            class="w-20 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30 focus:outline-none"
+                                            value="320"></td>
+                                    <td class="py-2 px-2 bg-cyan-500/5"><input id="p-grpc-mem-100" type="number"
+                                            class="w-20 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/30 focus:outline-none"
+                                            value="220"></td>
+                                </tr>
+                                <!-- 500 Req -->
+                                <tr class="hover:bg-slate-800/20 transition-all">
+                                    <td class="py-3 px-3 font-semibold text-slate-400">500</td>
+                                    <td class="py-2 px-2 bg-rose-500/5"><input id="p-rest-rt-500" type="number"
+                                            class="w-20 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30 focus:outline-none"
+                                            value="240"></td>
+                                    <td class="py-2 px-2 bg-cyan-500/5"><input id="p-grpc-rt-500" type="number"
+                                            class="w-20 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/30 focus:outline-none"
+                                            value="150"></td>
+                                    <td class="py-2 px-2 bg-rose-500/5"><input id="p-rest-tp-500" type="number"
+                                            class="w-20 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30 focus:outline-none"
+                                            value="720"></td>
+                                    <td class="py-2 px-2 bg-cyan-500/5"><input id="p-grpc-tp-500" type="number"
+                                            class="w-20 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/30 focus:outline-none"
+                                            value="1100"></td>
+                                    <td class="py-2 px-2 bg-rose-500/5"><input id="p-rest-cpu-500" type="number"
+                                            class="w-20 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30 focus:outline-none"
+                                            value="58"></td>
+                                    <td class="py-2 px-2 bg-cyan-500/5"><input id="p-grpc-cpu-500" type="number"
+                                            class="w-20 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/30 focus:outline-none"
+                                            value="40"></td>
+                                    <td class="py-2 px-2 bg-rose-500/5"><input id="p-rest-mem-500" type="number"
+                                            class="w-20 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30 focus:outline-none"
+                                            value="420"></td>
+                                    <td class="py-2 px-2 bg-cyan-500/5"><input id="p-grpc-mem-500" type="number"
+                                            class="w-20 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/30 focus:outline-none"
+                                            value="300"></td>
+                                </tr>
+                                <!-- 1000 Req -->
+                                <tr class="hover:bg-slate-800/20 transition-all">
+                                    <td class="py-3 px-3 font-semibold text-slate-400">1000</td>
+                                    <td class="py-2 px-2 bg-rose-500/5"><input id="p-rest-rt-1000" type="number"
+                                            class="w-20 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30 focus:outline-none"
+                                            value="430"></td>
+                                    <td class="py-2 px-2 bg-cyan-500/5"><input id="p-grpc-rt-1000" type="number"
+                                            class="w-20 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/30 focus:outline-none"
+                                            value="260"></td>
+                                    <td class="py-2 px-2 bg-rose-500/5"><input id="p-rest-tp-1000" type="number"
+                                            class="w-20 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30 focus:outline-none"
+                                            value="600"></td>
+                                    <td class="py-2 px-2 bg-cyan-500/5"><input id="p-grpc-tp-1000" type="number"
+                                            class="w-20 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/30 focus:outline-none"
+                                            value="980"></td>
+                                    <td class="py-2 px-2 bg-rose-500/5"><input id="p-rest-cpu-1000" type="number"
+                                            class="w-20 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30 focus:outline-none"
+                                            value="65"></td>
+                                    <td class="py-2 px-2 bg-cyan-500/5"><input id="p-grpc-cpu-1000" type="number"
+                                            class="w-20 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/30 focus:outline-none"
+                                            value="46"></td>
+                                    <td class="py-2 px-2 bg-rose-500/5"><input id="p-rest-mem-1000" type="number"
+                                            class="w-20 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30 focus:outline-none"
+                                            value="480"></td>
+                                    <td class="py-2 px-2 bg-cyan-500/5"><input id="p-grpc-mem-1000" type="number"
+                                            class="w-20 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/30 focus:outline-none"
+                                            value="350"></td>
+                                </tr>
+                                <!-- 5000 Req -->
+                                <tr class="hover:bg-slate-800/20 transition-all">
+                                    <td class="py-3 px-3 font-semibold text-slate-400">5000</td>
+                                    <td class="py-2 px-2 bg-rose-500/5"><input id="p-rest-rt-5000" type="number"
+                                            class="w-20 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30 focus:outline-none"
+                                            value="920"></td>
+                                    <td class="py-2 px-2 bg-cyan-500/5"><input id="p-grpc-rt-5000" type="number"
+                                            class="w-20 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/30 focus:outline-none"
+                                            value="540"></td>
+                                    <td class="py-2 px-2 bg-rose-500/5"><input id="p-rest-tp-5000" type="number"
+                                            class="w-20 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30 focus:outline-none"
+                                            value="420"></td>
+                                    <td class="py-2 px-2 bg-cyan-500/5"><input id="p-grpc-tp-5000" type="number"
+                                            class="w-20 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/30 focus:outline-none"
+                                            value="810"></td>
+                                    <td class="py-2 px-2 bg-rose-500/5"><input id="p-rest-cpu-5000" type="number"
+                                            class="w-20 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30 focus:outline-none"
+                                            value="68"></td>
+                                    <td class="py-2 px-2 bg-cyan-500/5"><input id="p-grpc-cpu-5000" type="number"
+                                            class="w-20 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/30 focus:outline-none"
+                                            value="51"></td>
+                                    <td class="py-2 px-2 bg-rose-500/5"><input id="p-rest-mem-5000" type="number"
+                                            class="w-20 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30 focus:outline-none"
+                                            value="520"></td>
+                                    <td class="py-2 px-2 bg-cyan-500/5"><input id="p-grpc-mem-5000" type="number"
+                                            class="w-20 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/30 focus:outline-none"
+                                            value="410"></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Metrics Grid -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <!-- gRPC Card -->
+                    <div
+                        class="bg-slate-900/60 backdrop-blur-md border border-slate-800/80 hover:border-slate-700/60 rounded-2xl p-6 flex flex-col justify-between min-h-[170px] transition-all duration-300 hover:shadow-xl hover:shadow-cyan-950/10">
+                        <div class="flex justify-between items-center">
+                            <span
+                                class="bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-xs font-semibold px-3 py-1 rounded-full uppercase tracking-wider">gRPC
+                                (HTTP/2)</span>
+                            <span
+                                class="flex items-center gap-1 text-emerald-400 bg-emerald-500/10 text-xs font-semibold px-2 py-1 rounded">
+                                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
+                                    <path fill="currentColor"
+                                        d="M7.41,15.41L12,10.83L16.59,15.41L18,14L12,8L6,14L7.41,15.41Z" />
+                                </svg>
+                                <span id="metric-grpc-diff">41.3% Faster</span>
+                            </span>
+                        </div>
+                        <div class="my-4">
+                            <div class="text-3xl font-extrabold text-cyan-400" id="val-grpc-rt">540 ms</div>
+                            <div class="text-xs text-slate-400 mt-1">Waktu Respon Maksimal (5000 Req)</div>
+                        </div>
+                        <div class="text-[10px] text-slate-500 border-t border-slate-800/50 pt-2.5 mt-2">
+                            Protocol Buffers Binary Serialization
+                        </div>
+                    </div>
+
+                    <!-- REST Card -->
+                    <div
+                        class="bg-slate-900/60 backdrop-blur-md border border-slate-800/80 hover:border-slate-700/60 rounded-2xl p-6 flex flex-col justify-between min-h-[170px] transition-all duration-300 hover:shadow-xl hover:shadow-rose-950/10">
+                        <div class="flex justify-between items-center">
+                            <span
+                                class="bg-rose-500/10 text-rose-400 border border-rose-500/20 text-xs font-semibold px-3 py-1 rounded-full uppercase tracking-wider">REST
+                                API (HTTP/1.1)</span>
+                            <span
+                                class="text-slate-400 bg-slate-800/50 text-xs font-semibold px-2 py-1 rounded">Baseline</span>
+                        </div>
+                        <div class="my-4">
+                            <div class="text-3xl font-extrabold text-rose-400" id="val-rest-rt">920 ms</div>
+                            <div class="text-xs text-slate-400 mt-1">Waktu Respon Maksimal (5000 Req)</div>
+                        </div>
+                        <div class="text-[10px] text-slate-500 border-t border-slate-800/50 pt-2.5 mt-2">
+                            Textual JSON Serialization
+                        </div>
+                    </div>
+
+                    <!-- Compare Card -->
+                    <div
+                        class="bg-slate-900/60 backdrop-blur-md border border-slate-800/80 hover:border-slate-700/60 rounded-2xl p-6 flex flex-col justify-between min-h-[170px] transition-all duration-300 hover:shadow-xl">
+                        <div class="flex justify-between items-center">
+                            <span
+                                class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-semibold px-3 py-1 rounded-full uppercase tracking-wider">Throughput
+                                Winner</span>
+                            <span class="font-bold text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.3)]">gRPC</span>
+                        </div>
+                        <div class="my-4">
+                            <div class="text-3xl font-extrabold bg-gradient-to-r from-emerald-400 to-teal-500 bg-clip-text text-transparent"
+                                id="val-win-ratio">1.9x</div>
+                            <div class="text-xs text-slate-400 mt-1">Request Terproses / Detik (Beban 5000)</div>
+                        </div>
+                        <div class="text-[10px] text-slate-500 border-t border-slate-800/50 pt-2.5 mt-2">
+                            Multiplexing & Connection Keep-Alive
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts Container -->
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
+                    <!-- Response Time Chart -->
+                    <div class="bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-2xl p-6">
+                        <div class="flex justify-between items-baseline mb-4">
+                            <h3 class="text-sm font-semibold text-slate-200">Response Time (Latency) Comparison</h3>
+                            <span class="text-[10px] text-slate-500">Makin rendah makin baik (ms)</span>
+                        </div>
+                        <div class="h-72 w-full relative">
+                            <canvas id="chart-response-time"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Throughput Chart -->
+                    <div class="bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-2xl p-6">
+                        <div class="flex justify-between items-baseline mb-4">
+                            <h3 class="text-sm font-semibold text-slate-200">Throughput Comparison</h3>
+                            <span class="text-[10px] text-slate-500">Makin tinggi makin baik (Req/Sec)</span>
+                        </div>
+                        <div class="h-72 w-full relative">
+                            <canvas id="chart-throughput"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- CPU Usage Chart -->
+                    <div class="bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-2xl p-6">
+                        <div class="flex justify-between items-baseline mb-4">
+                            <h3 class="text-sm font-semibold text-slate-200">CPU Usage (%)</h3>
+                            <span class="text-[10px] text-slate-500">Persentase utilisasi (%)</span>
+                        </div>
+                        <div class="h-72 w-full relative">
+                            <canvas id="chart-cpu"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Memory Usage Chart -->
+                    <div class="bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-2xl p-6">
+                        <div class="flex justify-between items-baseline mb-4">
+                            <h3 class="text-sm font-semibold text-slate-200">Memory Usage</h3>
+                            <span class="text-[10px] text-slate-500">Konsumsi memori (MB)</span>
+                        </div>
+                        <div class="h-72 w-full relative">
+                            <canvas id="chart-memory"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Info Cards -->
+                <div class="bg-indigo-500/[0.03] border border-indigo-500/10 rounded-2xl p-6">
+                    <h3 class="text-base font-semibold text-indigo-300 mb-2 flex items-center gap-2">
+                        <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        Ringkasan Analisis Performa
+                    </h3>
+                    <p class="text-slate-400 text-sm leading-relaxed">
+                        Hasil pengujian secara konsisten membuktikan bahwa <strong class="text-cyan-400">gRPC</strong>
+                        mengungguli <strong class="text-rose-400">REST API</strong> dalam semua skenario pengujian. Pada
+                        beban tertinggi (5000 concurrent request), gRPC mampu memangkas latensi hingga <span
+                            id="txt-latency-diff" class="text-slate-200 font-semibold">540 ms</span> dibandingkan REST
+                        API yang membutuhkan <span id="txt-rest-rt" class="text-slate-200 font-semibold">920 ms</span>.
+                        Selain itu, throughput gRPC mencapai <span id="txt-grpc-tp"
+                            class="text-slate-200 font-semibold">810 req/s</span> (hampir 2 kali lipat dari REST API
+                        yang hanya <span id="txt-rest-tp" class="text-slate-200 font-semibold">420 req/s</span>).
+                        Efisiensi ini dicapai berkat penghematan bandwidth Protocol Buffers yang berformat biner, serta
+                        dukungan multiplexing HTTP/2 yang menihilkan bottleneck koneksi TCP/IP secara berulang.
+                    </p>
+                </div>
+            </section>
+
+            <!-- SECTION 2: SIMULATOR -->
+            <section id="section-simulator" class="content-section hidden">
+                <div class="text-slate-400 text-base mb-6 max-w-4xl">
+                    Simulasikan transfer data interaktif untuk melihat perbedaan mekanisme komunikasi REST API (HTTP/1.1
+                    JSON) dengan gRPC (HTTP/2 Protocol Buffers) secara real-time.
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-6 items-start">
+                    <!-- Control Panel Card -->
+                    <div class="bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-2xl p-6 shadow-xl">
+                        <h3 class="text-sm font-bold text-slate-100 pb-3 mb-4 border-b border-slate-800/80">Konfigurasi
+                            Pengujian</h3>
+
+                        <div class="mb-4">
+                            <label for="sim-concurrency" class="block text-xs font-semibold text-slate-400 mb-2">Jumlah
+                                Concurrent Request:</label>
+                            <select id="sim-concurrency"
+                                class="w-full bg-slate-950 border border-slate-800 rounded-lg text-slate-200 p-2.5 text-sm outline-none cursor-pointer focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/20 transition-all">
+                                <option value="100">100 Requests</option>
+                                <option value="500">500 Requests</option>
+                                <option value="1000">1000 Requests</option>
+                                <option value="5000">5000 Requests</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-5">
+                            <label for="sim-speed" class="block text-xs font-semibold text-slate-400 mb-2">Kecepatan Simulasi:</label>
+                            <select id="sim-speed"
+                                class="w-full bg-slate-950 border border-slate-800 rounded-lg text-slate-200 p-2.5 text-sm outline-none cursor-pointer focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/20 transition-all">
+                                <option value="0.5">0.5x (Slow Motion)</option>
+                                <option value="1" selected>1.0x (Normal)</option>
+                                <option value="2">2.0x (Cepat)</option>
+                                <option value="5">5.0x (Sangat Cepat)</option>
+                                <option value="10">10.0x (Maksimal)</option>
+                            </select>
+                        </div>
+
+                        <!-- Editor Payload Informasi -->
+                        <div class="mb-5 border-t border-slate-800/80 pt-4">
+                            <h4 class="text-xs font-bold text-slate-200 uppercase tracking-wider mb-3">Editor Informasi Payload</h4>
+                            <div class="flex flex-col gap-2.5">
+                                <div>
+                                    <label for="sim-payload-id" class="block text-[10px] text-slate-400 mb-1">User ID:</label>
+                                    <input id="sim-payload-id" type="text"
+                                        class="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-200 focus:border-cyan-500 focus:outline-none"
+                                        value="USR-9988223">
+                                </div>
+                                <div>
+                                    <label for="sim-payload-name" class="block text-[10px] text-slate-400 mb-1">Nama Lengkap:</label>
+                                    <input id="sim-payload-name" type="text"
+                                        class="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-200 focus:border-cyan-500 focus:outline-none"
+                                        value="Muhammad Bintang">
+                                </div>
+                                <div>
+                                    <label for="sim-payload-email" class="block text-[10px] text-slate-400 mb-1">Email Address:</label>
+                                    <input id="sim-payload-email" type="email"
+                                        class="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-200 focus:border-cyan-500 focus:outline-none"
+                                        value="mbintang23@mhs.unitama.ac.id">
+                                </div>
+                                <div>
+                                    <label for="sim-payload-role" class="block text-[10px] text-slate-400 mb-1">User Role:</label>
+                                    <input id="sim-payload-role" type="text"
+                                        class="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-200 focus:border-cyan-500 focus:outline-none"
+                                        value="Administrator">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-col gap-3.5 mb-6">
+                            <button id="btn-run-sim"
+                                class="flex items-center justify-center gap-2 bg-gradient-to-r from-cyan-400 to-blue-500 hover:opacity-95 text-slate-950 font-bold py-2.5 px-4 rounded-xl shadow-lg shadow-cyan-500/10 hover:shadow-cyan-500/20 transition-all">
+                                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M8,5.14V19.14L19,12.14L8,5.14Z" />
+                                </svg>
+                                Jalankan Simulasi
+                            </button>
+                            <button id="btn-reset-sim"
+                                class="bg-transparent border border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-850 hover:border-slate-700 font-semibold py-2 px-4 rounded-xl transition-all">Reset</button>
+                        </div>
+
+                        <div class="flex flex-col gap-4 border-t border-slate-800/80 pt-5 text-xs">
+                            <div class="bg-slate-950/40 border border-slate-800/50 rounded-xl p-3">
+                                <div class="flex items-center gap-1.5 font-bold mb-1.5"><span
+                                        class="w-2 h-2 rounded-full bg-rose-500"></span>REST API (HTTP/1.1)</div>
+                                <ul class="list-disc pl-4 text-slate-400 space-y-1">
+                                    <li>Format: JSON (Teks)</li>
+                                    <li>Koneksi: Sequential / Queue</li>
+                                    <li>Payload: Ukuran Besar (JSON)</li>
+                                </ul>
+                            </div>
+                            <div class="bg-slate-950/40 border border-slate-800/50 rounded-xl p-3">
+                                <div class="flex items-center gap-1.5 font-bold mb-1.5"><span
+                                        class="w-2 h-2 rounded-full bg-cyan-400"></span>gRPC (HTTP/2)</div>
+                                <ul class="list-disc pl-4 text-slate-400 space-y-1">
+                                    <li>Format: Protobuf (Biner)</li>
+                                    <li>Koneksi: Multiplexing Streams</li>
+                                    <li>Payload: Ringkas & Kecil</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Visualizer Screen Card -->
+                    <div
+                        class="bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col gap-6">
+                        <div class="flex justify-between items-center">
+                            <h3 class="text-sm font-bold text-slate-100">Visualisasi Komunikasi Jaringan</h3>
+                            <div class="bg-slate-850 border border-slate-800 text-slate-400 font-bold px-3 py-1 rounded-full text-xs"
+                                id="sim-status-text">Ready</div>
+                        </div>
+
+                        <div
+                            class="bg-slate-950 border border-slate-900 rounded-xl min-h-[420px] relative overflow-hidden flex flex-col">
+
+                            <!-- Dials / Dynamic Stats Overlay -->
+                            <div
+                                class="grid grid-cols-4 gap-4 p-4 bg-slate-900/80 border-b border-slate-800/80 text-center">
+                                <div class="bg-slate-950/40 p-2.5 rounded-lg border border-slate-850">
+                                    <div class="text-[10px] text-slate-500 font-bold uppercase">REST TCP Links</div>
+                                    <div id="sim-rest-conns" class="text-lg font-extrabold text-rose-400">0</div>
+                                    <div class="text-[9px] text-slate-500">Max 6 connections</div>
+                                </div>
+                                <div class="bg-slate-950/40 p-2.5 rounded-lg border border-slate-850">
+                                    <div class="text-[10px] text-slate-500 font-bold uppercase">gRPC TCP Links</div>
+                                    <div id="sim-grpc-conns" class="text-lg font-extrabold text-cyan-400">0</div>
+                                    <div class="text-[9px] text-slate-500">Exactly 1 connection</div>
+                                </div>
+                                <div class="bg-slate-950/40 p-2.5 rounded-lg border border-slate-850">
+                                    <div class="text-[10px] text-slate-500 font-bold uppercase">REST Bandwidth</div>
+                                    <div id="sim-rest-bandwidth" class="text-lg font-extrabold text-rose-400">0.0 KB
+                                    </div>
+                                    <div class="text-[9px] text-slate-500">~4.1 KB per payload</div>
+                                </div>
+                                <div class="bg-slate-950/40 p-2.5 rounded-lg border border-slate-850">
+                                    <div class="text-[10px] text-slate-500 font-bold uppercase">gRPC Bandwidth</div>
+                                    <div id="sim-grpc-bandwidth" class="text-lg font-extrabold text-cyan-400">0.0 KB
+                                    </div>
+                                    <div class="text-[9px] text-slate-500">~1.2 KB per payload</div>
+                                </div>
+                            </div>
+
+                            <div class="flex-1 flex items-center justify-center p-4">
+                                <!-- Interactive SVG Network Flow Diagram (Split Screen) -->
+                                <svg id="network-svg" viewBox="0 0 800 240" class="w-full h-full">
+                                    <defs>
+                                        <linearGradient id="rest-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                            <stop offset="0%" stop-color="#ff5e62" />
+                                            <stop offset="100%" stop-color="#ff9966" />
+                                        </linearGradient>
+                                        <linearGradient id="grpc-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                            <stop offset="0%" stop-color="#00f2fe" />
+                                            <stop offset="100%" stop-color="#4facfe" />
+                                        </linearGradient>
+                                        <filter id="glow-rest" x="-20%" y="-20%" width="140%" height="140%">
+                                            <feGaussianBlur stdDeviation="3" result="blur" />
+                                            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                                        </filter>
+                                        <filter id="glow-grpc" x="-20%" y="-20%" width="140%" height="140%">
+                                            <feGaussianBlur stdDeviation="3" result="blur" />
+                                            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                                        </filter>
+                                    </defs>
+
+                                    <!-- Divider Line between paths -->
+                                    <line x1="20" y1="120" x2="780" y2="120" stroke="rgba(255,255,255,0.05)"
+                                        stroke-width="1" stroke-dasharray="8,4" />
+
+                                    <!-- SECTION 1: TOP REST PATH -->
+                                    <g id="group-rest-visual">
+                                        <!-- Connection Pipelines (Top) -->
+                                        <path id="path-rest-0" d="M 80 60 Q 250 30 480 60"
+                                            stroke="rgba(255, 94, 98, 0.08)" stroke-width="3" fill="none" />
+                                        <path id="path-rest-1" d="M 80 60 Q 250 40 480 60"
+                                            stroke="rgba(255, 94, 98, 0.08)" stroke-width="3" fill="none" />
+                                        <path id="path-rest-2" d="M 80 60 Q 250 50 480 60"
+                                            stroke="rgba(255, 94, 98, 0.08)" stroke-width="3" fill="none" />
+                                        <path id="path-rest-3" d="M 80 60 Q 250 70 480 60"
+                                            stroke="rgba(255, 94, 98, 0.08)" stroke-width="3" fill="none" />
+                                        <path id="path-rest-4" d="M 80 60 Q 250 80 480 60"
+                                            stroke="rgba(255, 94, 98, 0.08)" stroke-width="3" fill="none" />
+                                        <path id="path-rest-5" d="M 80 60 Q 250 90 480 60"
+                                            stroke="rgba(255, 94, 98, 0.08)" stroke-width="3" fill="none" />
+
+                                        <!-- Return Path REST -->
+                                        <path id="path-rest-res" d="M 680 60 L 480 60 L 80 60"
+                                            stroke="rgba(255, 94, 98, 0.05)" stroke-width="1.5" stroke-dasharray="4,4"
+                                            fill="none" />
+
+                                        <!-- Service to DB Path -->
+                                        <path id="path-rest-db" d="M 480 60 L 680 60" stroke="rgba(255, 255, 255, 0.05)"
+                                            stroke-width="2" fill="none" />
+
+                                        <!-- Nodes (Top) -->
+                                        <!-- Client (REST) -->
+                                        <g id="node-rest-client" transform="translate(80, 60)" class="transition-transform duration-300">
+                                            <circle r="25" fill="#0f172a" stroke="#e11d48" stroke-width="1.5" />
+                                            <text text-anchor="middle" y="4" fill="#f1f5f9" font-family="Outfit"
+                                                font-size="8" font-weight="600">Client A</text>
+                                            <text text-anchor="middle" y="-32" fill="#94a3b8" font-family="Outfit"
+                                                font-size="9" font-weight="500">HTTP/1.1</text>
+                                            <text id="sim-rest-queue-text" text-anchor="middle" y="-12" fill="#ff5e62" font-family="Outfit"
+                                                font-size="8" font-weight="bold" class="hidden">Queue: 0</text>
+                                        </g>
+
+                                        <!-- Server (REST Gateway / Service) -->
+                                        <g id="node-rest-server" transform="translate(480, 60)" class="transition-transform duration-300">
+                                            <circle r="25" fill="#0f172a" stroke="#e11d48" stroke-width="1.5" />
+                                            <text text-anchor="middle" y="4" fill="#f1f5f9" font-family="Outfit"
+                                                font-size="8" font-weight="600">REST Svc</text>
+                                        </g>
+
+                                        <!-- MySQL (REST Database) -->
+                                        <g id="node-rest-db" transform="translate(680, 60)" class="transition-transform duration-300">
+                                            <path d="M-12,-15 C-12,-18 12,-18 12,-15 L12,15 C12,18 -12,18 -12,15 Z"
+                                                fill="#0f172a" stroke="#475569" stroke-width="1" />
+                                            <ellipse cx="0" cy="-15" rx="12" ry="3" fill="#1e293b" stroke="#475569"
+                                                stroke-width="1" />
+                                            <text text-anchor="middle" y="3" fill="#64748b" font-family="Outfit"
+                                                font-size="7">DB</text>
+                                        </g>
+                                    </g>
+
+                                    <!-- SECTION 2: BOTTOM gRPC PATH -->
+                                    <g id="group-grpc-visual">
+                                        <!-- Single Conduit (HTTP/2 Multiplexed) -->
+                                        <path id="path-grpc-conduit" d="M 80 180 L 480 180"
+                                            stroke="rgba(34, 211, 238, 0.12)" stroke-width="10" stroke-linecap="round"
+                                            fill="none" />
+                                        <path id="path-grpc-line" d="M 80 180 L 480 180"
+                                            stroke="rgba(34, 211, 238, 0.3)" stroke-width="2" fill="none" />
+
+                                        <!-- Return Path gRPC -->
+                                        <path id="path-grpc-res" d="M 680 180 L 480 180 L 80 180"
+                                            stroke="rgba(34, 211, 238, 0.05)" stroke-width="1.5" stroke-dasharray="4,4"
+                                            fill="none" />
+
+                                        <!-- Service to DB Path -->
+                                        <path id="path-grpc-db" d="M 480 180 L 680 180"
+                                            stroke="rgba(255, 255, 255, 0.05)" stroke-width="2" fill="none" />
+
+                                        <!-- Nodes (Bottom) -->
+                                        <!-- Client (gRPC) -->
+                                        <g id="node-grpc-client" transform="translate(80, 180)" class="transition-transform duration-300">
+                                            <circle r="25" fill="#0f172a" stroke="#06b6d4" stroke-width="1.5" />
+                                            <text text-anchor="middle" y="4" fill="#f1f5f9" font-family="Outfit"
+                                                font-size="8" font-weight="600">Client B</text>
+                                            <text text-anchor="middle" y="36" fill="#94a3b8" font-family="Outfit"
+                                                font-size="9" font-weight="500">HTTP/2</text>
+                                        </g>
+
+                                        <!-- Server (gRPC Service) -->
+                                        <g id="node-grpc-server" transform="translate(480, 180)" class="transition-transform duration-300">
+                                            <circle r="25" fill="#0f172a" stroke="#06b6d4" stroke-width="1.5" />
+                                            <text text-anchor="middle" y="4" fill="#f1f5f9" font-family="Outfit"
+                                                font-size="8" font-weight="600">gRPC Svc</text>
+                                        </g>
+
+                                        <!-- MySQL (gRPC Database) -->
+                                        <g id="node-grpc-db" transform="translate(680, 180)" class="transition-transform duration-300">
+                                            <path d="M-12,-15 C-12,-18 12,-18 12,-15 L12,15 C12,18 -12,18 -12,15 Z"
+                                                fill="#0f172a" stroke="#475569" stroke-width="1" />
+                                            <ellipse cx="0" cy="-15" rx="12" ry="3" fill="#1e293b" stroke="#475569"
+                                                stroke-width="1" />
+                                            <text text-anchor="middle" y="3" fill="#64748b" font-family="Outfit"
+                                                font-size="7">DB</text>
+                                        </g>
+                                    </g>
+
+                                    <!-- Packets Container -->
+                                    <g id="packet-container"></g>
+                                </svg>
+                            </div>
+
+                            <!-- Simulation Dashboard Stats overlay -->
+                            <div class="grid grid-cols-2 gap-6 p-5 bg-slate-900 border-t border-slate-800">
+                                <div>
+                                    <div class="text-xs font-semibold text-slate-400 mb-1.5 flex justify-between">
+                                        <span>REST API Progress</span>
+                                        <span id="sim-rest-pct" class="text-rose-400 font-bold">0%</span>
+                                    </div>
+                                    <div class="w-full h-2 bg-slate-850 rounded-full overflow-hidden">
+                                        <div id="rest-progress-bar"
+                                            class="h-full w-0 bg-gradient-to-r from-rose-500 to-orange-400 shadow-md shadow-rose-500/20 transition-all duration-75">
+                                        </div>
+                                    </div>
+                                    <div class="flex justify-between font-mono text-[10px] mt-1 text-slate-400">
+                                        <span id="sim-rest-time">0 ms</span>
+                                        <span id="sim-rest-done">0/0 req</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="text-xs font-semibold text-slate-400 mb-1.5 flex justify-between">
+                                        <span>gRPC Progress</span>
+                                        <span id="sim-grpc-pct" class="text-cyan-400 font-bold">0%</span>
+                                    </div>
+                                    <div class="w-full h-2 bg-slate-850 rounded-full overflow-hidden">
+                                        <div id="grpc-progress-bar"
+                                            class="h-full w-0 bg-gradient-to-r from-cyan-400 to-blue-500 shadow-md shadow-cyan-500/20 transition-all duration-75">
+                                        </div>
+                                    </div>
+                                    <div class="flex justify-between font-mono text-[10px] mt-1 text-slate-400">
+                                        <span id="sim-grpc-time">0 ms</span>
+                                        <span id="sim-grpc-done">0/0 req</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Payload Structures Explorer -->
+                        <div
+                            class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-2 border border-slate-850 p-4 rounded-xl bg-slate-950/50">
+                            <div>
+                                <div class="text-xs font-bold text-rose-400 mb-2 flex items-center gap-1.5">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+                                    REST Payload structure (JSON - Text)
+                                </div>
+                                <pre id="rest-payload-block"
+                                    class="p-3 bg-slate-900 border border-slate-800 rounded-lg font-mono text-[9px] text-slate-400 overflow-x-auto leading-normal select-all transition-all duration-300">
+{
+  <span class="text-rose-400">"id"</span>: <span class="text-emerald-400">"USR-9988223"</span>,
+  <span class="text-rose-400">"name"</span>: <span class="text-emerald-400">"Muhammad Bintang"</span>,
+  <span class="text-rose-400">"email"</span>: <span class="text-emerald-400">"mbintang23@mhs.unitama.ac.id"</span>,
+  <span class="text-rose-400">"role"</span>: <span class="text-emerald-400">"Administrator"</span>
+}</pre>
+                                <div id="rest-payload-size" class="text-[9px] text-slate-500 mt-1">Ukuran Payload: ~98 bytes (Teks mentah +
+                                    spasi)</div>
+                            </div>
+
+                            <div>
+                                <div class="text-xs font-bold text-cyan-400 mb-2 flex items-center gap-1.5">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+                                    gRPC Payload structure (Protobuf - Binary)
+                                </div>
+                                <pre id="grpc-payload-block"
+                                    class="p-3 bg-slate-900 border border-slate-800 rounded-lg font-mono text-[9px] text-slate-400 overflow-x-auto leading-normal select-all transition-all duration-300">
+<span class="text-slate-500">// Serialized Binary (Hexadecimal representation)</span>
+0a 0b 55 53 52 2d 39 39 38 38 32 32 33 12 10
+4d 75 68 61 6d 6d 61 64 20 42 69 6e 74 61 6e
+67 1a 1b 6d 62 69 6e 74 61 6e 67 32 33 40 6d
+68 73 2e 75 6e 69 74 61 6d 61 2e 61 63 2e 69
+64 22 0d 41 64 6d 69 6e 69 73 74 72 61 74 6f
+72</pre>
+                                <div id="grpc-payload-size" class="text-[9px] text-slate-500 mt-1">Ukuran Payload: ~66 bytes (Biner terkompresi
+                                    tanpa redundansi kunci)</div>
+                            </div>
+                        </div>
+
+                        <!-- Live Terminal Logger -->
+                        <div class="bg-black/60 border border-slate-850 rounded-xl overflow-hidden shadow-inner">
+                            <div class="bg-slate-950/80 px-4 py-2 border-b border-slate-850 flex items-center">
+                                <div class="flex gap-1.5 mr-4">
+                                    <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+                                    <span class="w-2.5 h-2.5 rounded-full bg-yellow-500"></span>
+                                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                                </div>
+                                <span class="text-[10px] font-mono text-slate-500">Live Communication Log</span>
+                            </div>
+                            <div class="p-4 h-40 overflow-y-auto font-mono text-[11px] text-slate-300 leading-relaxed scroll-smooth"
+                                id="terminal-log-output">
+                                <span class="text-emerald-400">[SYS]</span> System initialized. Choose request size and
+                                run simulation.<br>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION 3: DOKUMEN PAPER -->
+            <section id="section-paper" class="content-section hidden">
+                <div class="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-10 items-start">
+                    <!-- Table of Contents Sidebar -->
+                    <aside class="sticky top-8 bg-slate-900/40 border border-slate-800 rounded-2xl p-4">
+                        <h4 class="text-xs font-bold text-slate-200 uppercase tracking-widest mb-4">Daftar Isi</h4>
+                        <ul class="flex flex-col gap-0.5 text-xs">
+                            <li><a href="#paper-head"
+                                    class="toc-link block text-slate-400 border-l-2 border-transparent px-3 py-2 hover:text-slate-200 hover:border-slate-700 active font-medium transition-all">Identitas</a>
+                            </li>
+                            <li><a href="#paper-abstrak"
+                                    class="toc-link block text-slate-400 border-l-2 border-transparent px-3 py-2 hover:text-slate-200 hover:border-slate-700 transition-all">Abstrak</a>
+                            </li>
+                            <li><a href="#paper-pendahuluan"
+                                    class="toc-link block text-slate-400 border-l-2 border-transparent px-3 py-2 hover:text-slate-200 hover:border-slate-700 transition-all">1.
+                                    Pendahuluan</a></li>
+                            <li><a href="#paper-metode"
+                                    class="toc-link block text-slate-400 border-l-2 border-transparent px-3 py-2 hover:text-slate-200 hover:border-slate-700 transition-all">2.
+                                    Metode Penelitian</a></li>
+                            <li><a href="#paper-hasil"
+                                    class="toc-link block text-slate-400 border-l-2 border-transparent px-3 py-2 hover:text-slate-200 hover:border-slate-700 transition-all">3.
+                                    Hasil dan Pembahasan</a></li>
+                            <li><a href="#paper-kesimpulan"
+                                    class="toc-link block text-slate-400 border-l-2 border-transparent px-3 py-2 hover:text-slate-200 hover:border-slate-700 transition-all">4.
+                                    Kesimpulan</a></li>
+                            <li><a href="#paper-ucapan"
+                                    class="toc-link block text-slate-400 border-l-2 border-transparent px-3 py-2 hover:text-slate-200 hover:border-slate-700 transition-all">Ucapan
+                                    Terima Kasih</a></li>
+                            <li><a href="#paper-referensi"
+                                    class="toc-link block text-slate-400 border-l-2 border-transparent px-3 py-2 hover:text-slate-200 hover:border-slate-700 transition-all">Referensi</a>
+                            </li>
+                        </ul>
+                    </aside>
+
+                    <!-- Paper Document Body -->
+                    <article
+                        class="bg-slate-900/20 border border-slate-800 rounded-3xl p-8 lg:p-12 max-w-4xl mx-auto shadow-2xl">
+                        <header class="text-center mb-8" id="paper-head">
+                            <h2 class="text-2xl font-bold leading-normal text-slate-100 mb-5">Analisis Benchmark gRPC
+                                dan REST API terhadap Performa Komunikasi pada Arsitektur Microservices</h2>
+                            <div class="flex flex-col gap-1.5 text-xs text-slate-400">
+                                <span class="font-bold text-slate-200 text-sm">Muhammad Bintang</span>
+                                <span>Program Studi Teknik Informatika, Fakultas Ilmu Komputer, Universitas Teknologi
+                                    Akba Makassar, Indonesia</span>
+                                <span class="text-cyan-400 font-mono">Email: mbintang23@mhs.unitama.ac.id</span>
+                            </div>
+                        </header>
+
+                        <hr class="border-slate-800 my-8">
+
+                        <!-- Abstrak Section -->
+                        <section class="mb-10 text-justify" id="paper-abstrak">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 text-xs leading-relaxed text-slate-400">
+                                <div>
+                                    <h4 class="text-center font-bold text-slate-200 uppercase tracking-wider mb-3.5">
+                                        Abstrak</h4>
+                                    <p class="mb-3">Perkembangan teknologi sistem terdistribusi telah mendorong
+                                        penggunaan arsitektur microservices sebagai solusi dalam pengembangan aplikasi
+                                        modern yang membutuhkan skalabilitas, fleksibilitas, dan kemudahan pemeliharaan
+                                        sistem. Pada arsitektur microservices, komunikasi antar layanan menjadi komponen
+                                        penting yang sangat mempengaruhi performa keseluruhan aplikasi. Pemilihan
+                                        protokol komunikasi yang tepat menjadi salah satu faktor utama untuk
+                                        meningkatkan efisiensi pertukaran data antar layanan. Dua metode komunikasi yang
+                                        umum digunakan pada arsitektur microservices adalah Representational State
+                                        Transfer (REST API) dan Google Remote Procedure Call (gRPC). REST API
+                                        menggunakan protokol HTTP/1.1 dengan format data JSON yang mudah
+                                        diimplementasikan dan kompatibel dengan berbagai platform. Sementara itu, gRPC
+                                        menggunakan HTTP/2 dan Protocol Buffers yang menawarkan komunikasi data lebih
+                                        cepat, ringan, dan efisien.</p>
+                                    <p class="mb-3">Penelitian ini bertujuan untuk melakukan analisis benchmark terhadap
+                                        performa komunikasi antara gRPC dan REST API pada arsitektur microservices.
+                                        Metode penelitian yang digunakan adalah metode eksperimental dengan
+                                        membandingkan kedua protokol berdasarkan parameter performa seperti response
+                                        time, throughput, latensi, penggunaan CPU, dan penggunaan memori. Implementasi
+                                        sistem dilakukan menggunakan Docker untuk containerization dan NestJS sebagai
+                                        framework backend. Pengujian dilakukan dengan beberapa skenario concurrent
+                                        request untuk mengetahui performa masing-masing metode komunikasi pada kondisi
+                                        beban yang berbeda.</p>
+                                    <p class="mb-3">Hasil penelitian menunjukkan bahwa gRPC memiliki performa yang lebih
+                                        baik dibandingkan REST API dalam komunikasi antar layanan pada arsitektur
+                                        microservices. gRPC mampu menghasilkan latensi yang lebih rendah, throughput
+                                        yang lebih tinggi, serta penggunaan bandwidth yang lebih efisien dibandingkan
+                                        REST API. Namun demikian, REST API masih memiliki keunggulan dalam kemudahan
+                                        implementasi, kompatibilitas, dan integrasi dengan berbagai sistem. Penelitian
+                                        ini diharapkan dapat menjadi referensi dalam menentukan metode komunikasi yang
+                                        optimal pada pengembangan sistem terdistribusi berbasis microservices.</p>
+                                    <div class="text-[11px] mt-4 font-semibold text-slate-300"><strong>Kata
+                                            Kunci:</strong> Microservices, gRPC, REST API, Benchmark, Sistem
+                                        Terdistribusi</div>
+                                </div>
+
+                                <div>
+                                    <h4 class="text-center font-bold text-slate-200 uppercase tracking-wider mb-3.5">
+                                        Abstract</h4>
+                                    <p class="mb-3">The development of distributed system technology has encouraged the
+                                        adoption of microservices architecture as a solution for modern application
+                                        development requiring scalability, flexibility, and maintainability. In
+                                        microservices architecture, inter-service communication becomes an important
+                                        component that significantly affects overall application performance. Selecting
+                                        the appropriate communication protocol is one of the key factors in improving
+                                        data exchange efficiency between services. Two commonly used communication
+                                        methods in microservices architecture are Representational State Transfer (REST
+                                        API) and Google Remote Procedure Call (gRPC). REST API uses the HTTP/1.1
+                                        protocol with JSON data format which is easy to implement and compatible with
+                                        various platforms. Meanwhile, gRPC uses HTTP/2 and Protocol Buffers which
+                                        provide faster, lighter, and more efficient data communication.</p>
+                                    <p class="mb-3">This study aims to conduct a benchmark analysis of communication
+                                        performance between gRPC and REST API in microservices architecture. The
+                                        research method used is an experimental method by comparing both protocols based
+                                        on performance parameters such as response time, throughput, latency, CPU usage,
+                                        and memory usage. System implementation was developed using Docker for
+                                        containerization and NestJS as the backend framework. Testing was carried out
+                                        using several concurrent request scenarios to determine the performance of each
+                                        communication method under different workload conditions.</p>
+                                    <p class="mb-3">The results show that gRPC provides better performance compared to
+                                        REST API in inter-service communication within microservices architecture. gRPC
+                                        achieves lower latency, higher throughput, and more efficient bandwidth usage
+                                        than REST API. However, REST API still offers advantages in implementation
+                                        simplicity, compatibility, and integration with various systems. This research
+                                        is expected to become a reference in determining the optimal communication
+                                        method for developing distributed systems based on microservices architecture.
+                                    </p>
+                                    <div class="text-[11px] mt-4 font-semibold text-slate-300">
+                                        <strong>Keywords:</strong> Microservices, gRPC, REST API, Benchmark, Distributed
+                                        System
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <hr class="border-slate-800 my-8">
+
+                        <!-- 1. PENDAHULUAN -->
+                        <section class="mb-10 text-sm leading-relaxed text-slate-400 text-justify"
+                            id="paper-pendahuluan">
+                            <h3 class="text-base font-bold text-slate-100 mt-6 mb-4 pb-1.5 border-b border-slate-800">1.
+                                PENDAHULUAN</h3>
+                            <p class="mb-4">Perkembangan teknologi informasi dan kebutuhan aplikasi modern yang semakin
+                                kompleks mendorong penggunaan sistem terdistribusi dalam pengembangan perangkat lunak.
+                                Salah satu pendekatan yang populer digunakan saat ini adalah arsitektur microservices.
+                                Arsitektur microservices merupakan metode pengembangan aplikasi dengan memecah sistem
+                                menjadi beberapa layanan kecil yang berjalan secara independen dan saling berkomunikasi
+                                melalui jaringan. Pendekatan ini memberikan berbagai keuntungan seperti skalabilitas
+                                tinggi, kemudahan pemeliharaan, fleksibilitas deployment, dan kemampuan pengembangan
+                                layanan secara terpisah.</p>
+
+                            <!-- Figure 1 -->
+                            <div
+                                class="bg-slate-950/40 border border-slate-800 rounded-xl p-4 my-6 flex flex-col items-center gap-4">
+                                <div class="w-full max-w-lg">
+                                    <svg viewBox="0 0 600 220" class="w-full">
+                                        <!-- Monolith -->
+                                        <g transform="translate(10, 10)">
+                                            <rect width="250" height="180" rx="10" fill="#0f172a" stroke="#1e293b"
+                                                stroke-width="2" />
+                                            <text x="125" y="25" text-anchor="middle" fill="#f1f5f9" font-weight="600"
+                                                font-size="13">Arsitektur Monolith</text>
+
+                                            <!-- Concentrated Layers -->
+                                            <rect x="25" y="45" width="200" height="30" rx="5"
+                                                fill="rgba(100, 116, 139, 0.1)" stroke="#334155" />
+                                            <text x="125" y="64" text-anchor="middle" fill="#94a3b8" font-size="11">UI /
+                                                Frontend Layer</text>
+
+                                            <rect x="25" y="85" width="200" height="30" rx="5"
+                                                fill="rgba(100, 116, 139, 0.1)" stroke="#334155" />
+                                            <text x="125" y="104" text-anchor="middle" fill="#94a3b8"
+                                                font-size="11">Business Logic Layer</text>
+
+                                            <rect x="25" y="125" width="200" height="30" rx="5"
+                                                fill="rgba(100, 116, 139, 0.1)" stroke="#334155" />
+                                            <text x="125" y="144" text-anchor="middle" fill="#94a3b8"
+                                                font-size="11">Data Access Layer</text>
+                                        </g>
+
+                                        <!-- Arrow -->
+                                        <g transform="translate(280, 80)">
+                                            <line x1="0" y1="20" x2="35" y2="20" stroke="#475569" stroke-width="2"
+                                                marker-end="url(#arrow)" />
+                                            <defs>
+                                                <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6"
+                                                    markerHeight="6" orient="auto-start-reverse">
+                                                    <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569" />
+                                                </marker>
+                                            </defs>
+                                        </g>
+
+                                        <!-- Microservices -->
+                                        <g transform="translate(340, 10)">
+                                            <rect width="250" height="180" rx="10" fill="#0f172a" stroke="#1e293b"
+                                                stroke-width="2" />
+                                            <text x="125" y="25" text-anchor="middle" fill="#f1f5f9" font-weight="600"
+                                                font-size="13">Arsitektur Microservices</text>
+
+                                            <!-- Microservices Nodes -->
+                                            <rect x="25" y="45" width="85" height="40" rx="5"
+                                                fill="rgba(6, 182, 212, 0.05)" stroke="#06b6d4" stroke-width="1.5" />
+                                            <text x="67" y="69" text-anchor="middle" fill="#06b6d4" font-size="10"
+                                                font-weight="600">Auth Service</text>
+
+                                            <rect x="140" y="45" width="85" height="40" rx="5"
+                                                fill="rgba(6, 182, 212, 0.05)" stroke="#06b6d4" stroke-width="1.5" />
+                                            <text x="182" y="69" text-anchor="middle" fill="#06b6d4" font-size="10"
+                                                font-weight="600">User Service</text>
+
+                                            <rect x="25" y="115" width="85" height="40" rx="5"
+                                                fill="rgba(6, 182, 212, 0.05)" stroke="#06b6d4" stroke-width="1.5" />
+                                            <text x="67" y="139" text-anchor="middle" fill="#06b6d4" font-size="10"
+                                                font-weight="600">Comm Service</text>
+
+                                            <rect x="140" y="115" width="85" height="40" rx="5"
+                                                fill="rgba(6, 182, 212, 0.05)" stroke="#06b6d4" stroke-width="1.5" />
+                                            <text x="182" y="139" text-anchor="middle" fill="#06b6d4" font-size="10"
+                                                font-weight="600">Order Service</text>
+
+                                            <!-- Connections -->
+                                            <line x1="110" y1="65" x2="140" y2="65" stroke="#475569" stroke-width="1"
+                                                stroke-dasharray="2,2" />
+                                            <line x1="67" y1="85" x2="67" y2="115" stroke="#475569" stroke-width="1"
+                                                stroke-dasharray="2,2" />
+                                            <line x1="110" y1="135" x2="140" y2="135" stroke="#475569" stroke-width="1"
+                                                stroke-dasharray="2,2" />
+                                            <line x1="182" y1="85" x2="182" y2="115" stroke="#475569" stroke-width="1"
+                                                stroke-dasharray="2,2" />
+                                        </g>
+                                    </svg>
+                                </div>
+                                <span class="text-xs text-slate-500 italic text-center">Gambar 1. Perbandingan
+                                    Arsitektur Monolith dan Microservices</span>
+                            </div>
+
+                            <p class="mb-4">Dalam implementasi arsitektur microservices, komunikasi antar layanan
+                                menjadi faktor yang sangat penting karena setiap layanan harus dapat bertukar data
+                                secara cepat dan efisien. Performa komunikasi antar layanan akan mempengaruhi kecepatan
+                                proses bisnis aplikasi secara keseluruhan. Oleh karena itu, pemilihan metode komunikasi
+                                yang tepat sangat diperlukan agar sistem dapat berjalan secara optimal, terutama pada
+                                aplikasi berskala besar dengan jumlah pengguna yang tinggi.</p>
+                            <p class="mb-4">REST API merupakan metode komunikasi yang paling banyak digunakan dalam
+                                pengembangan aplikasi berbasis web dan microservices. REST API memanfaatkan protokol
+                                HTTP/1.1 dan format data JSON untuk pertukaran informasi antar layanan. REST API
+                                memiliki kelebihan berupa kemudahan implementasi, kompatibilitas tinggi, dan dukungan
+                                dokumentasi yang luas. Namun demikian, penggunaan format JSON menyebabkan ukuran data
+                                menjadi lebih besar sehingga dapat meningkatkan penggunaan bandwidth dan latensi
+                                komunikasi ketika sistem menangani request dalam jumlah besar.</p>
+                            <p class="mb-4">Seiring berkembangnya teknologi sistem terdistribusi, muncul teknologi
+                                komunikasi baru bernama gRPC yang dikembangkan oleh Google. gRPC menggunakan HTTP/2 dan
+                                Protocol Buffers sebagai format serialisasi data. Teknologi ini menawarkan performa
+                                komunikasi yang lebih cepat dan efisien dibandingkan REST API karena ukuran data yang
+                                lebih kecil dan kemampuan multiplexing pada HTTP/2. Selain itu, gRPC mendukung
+                                komunikasi streaming yang memungkinkan pertukaran data secara real-time antar layanan.
+                            </p>
+                            <p class="mb-4">Meskipun gRPC menawarkan berbagai keunggulan performa, implementasi
+                                teknologi tersebut masih memiliki beberapa tantangan seperti kompleksitas konfigurasi
+                                dan keterbatasan dukungan pada browser tertentu. Di sisi lain, REST API masih menjadi
+                                pilihan utama dalam banyak aplikasi karena lebih sederhana dan mudah diintegrasikan
+                                dengan berbagai platform. Oleh sebab itu, diperlukan penelitian yang mampu membandingkan
+                                performa kedua metode komunikasi tersebut secara objektif agar dapat menjadi referensi
+                                dalam pemilihan teknologi komunikasi pada sistem microservices.</p>
+                            <p class="mb-4">Penelitian ini bertujuan untuk melakukan benchmark terhadap performa gRPC
+                                dan REST API pada komunikasi antar layanan dalam arsitektur microservices. Parameter
+                                yang diuji meliputi response time, throughput, latensi, penggunaan CPU, dan penggunaan
+                                memori. Implementasi sistem dilakukan menggunakan framework NestJS dan teknologi
+                                containerization menggunakan Docker. Hasil penelitian diharapkan dapat memberikan
+                                kontribusi dalam pengembangan sistem terdistribusi modern serta membantu pengembang
+                                dalam menentukan metode komunikasi yang paling sesuai dengan kebutuhan aplikasi.</p>
+                        </section>
+
+                        <!-- 2. METODE PENELITIAN -->
+                        <section class="mb-10 text-sm leading-relaxed text-slate-400 text-justify" id="paper-metode">
+                            <h3 class="text-base font-bold text-slate-100 mt-6 mb-4 pb-1.5 border-b border-slate-800">2.
+                                METODE PENELITIAN</h3>
+
+                            <h4 class="font-bold text-slate-200 mb-2">2.1 Tahapan Penelitian</h4>
+                            <p class="mb-4">Metode penelitian yang digunakan dalam penelitian ini adalah metode
+                                eksperimen (experimental research) dengan melakukan pengujian benchmark terhadap
+                                performa komunikasi gRPC dan REST API pada arsitektur microservices <a href="#ref-1"
+                                    class="text-cyan-400 hover:underline">[1]</a>. Penelitian dilakukan untuk mengetahui
+                                perbandingan performa kedua metode komunikasi berdasarkan parameter response time,
+                                throughput, latensi, penggunaan CPU, dan penggunaan memori <a href="#ref-2"
+                                    class="text-cyan-400 hover:underline">[2]</a>.</p>
+
+                            <!-- Figure 2 -->
+                            <div
+                                class="bg-slate-950/40 border border-slate-800 rounded-xl p-4 my-6 flex flex-col items-center gap-4">
+                                <div class="w-full max-w-lg">
+                                    <svg viewBox="0 0 600 240" class="w-full">
+                                        <!-- Steps Flow -->
+                                        <!-- Step 1 -->
+                                        <g transform="translate(10, 40)">
+                                            <rect width="120" height="50" rx="6" fill="#0f172a" stroke="#334155"
+                                                stroke-width="1.5" />
+                                            <text x="60" y="22" text-anchor="middle" fill="#f1f5f9" font-size="10.5"
+                                                font-weight="600">1. Studi Literatur</text>
+                                            <text x="60" y="38" text-anchor="middle" fill="#64748b" font-size="9">gRPC,
+                                                REST, HTTP/2</text>
+                                        </g>
+                                        <path d="M 130 65 L 155 65" stroke="#475569" stroke-width="1.5"
+                                            marker-end="url(#arrow)" />
+
+                                        <!-- Step 2 -->
+                                        <g transform="translate(160, 40)">
+                                            <rect width="120" height="50" rx="6" fill="#0f172a" stroke="#334155"
+                                                stroke-width="1.5" />
+                                            <text x="60" y="22" text-anchor="middle" fill="#f1f5f9" font-size="10.5"
+                                                font-weight="600">2. Analisis Kebutuhan</text>
+                                            <text x="60" y="38" text-anchor="middle" fill="#64748b"
+                                                font-size="9">NestJS, Docker, MySQL</text>
+                                        </g>
+                                        <path d="M 280 65 L 305 65" stroke="#475569" stroke-width="1.5"
+                                            marker-end="url(#arrow)" />
+
+                                        <!-- Step 3 -->
+                                        <g transform="translate(310, 40)">
+                                            <rect width="120" height="50" rx="6" fill="#0f172a" stroke="#334155"
+                                                stroke-width="1.5" />
+                                            <text x="60" y="20" text-anchor="middle" fill="#f1f5f9" font-size="10.5"
+                                                font-weight="600">3. Perancangan</text>
+                                            <text x="60" y="34" text-anchor="middle" fill="#f1f5f9" font-size="10.5"
+                                                font-weight="600">Arsitektur</text>
+                                        </g>
+                                        <path d="M 430 65 L 455 65" stroke="#475569" stroke-width="1.5"
+                                            marker-end="url(#arrow)" />
+
+                                        <!-- Step 4 -->
+                                        <g transform="translate(460, 40)">
+                                            <rect width="120" height="50" rx="6" fill="#0f172a" stroke="#334155"
+                                                stroke-width="1.5" />
+                                            <text x="60" y="22" text-anchor="middle" fill="#f1f5f9" font-size="10.5"
+                                                font-weight="600">4. Implementasi</text>
+                                            <text x="60" y="38" text-anchor="middle" fill="#64748b" font-size="9">REST &
+                                                gRPC Code</text>
+                                        </g>
+
+                                        <!-- Down Line -->
+                                        <path d="M 520 90 L 520 120 L 490 120" stroke="#475569" stroke-width="1.5"
+                                            fill="none" />
+                                        <path d="M 490 120 L 450 120" stroke="#475569" stroke-width="1.5"
+                                            marker-end="url(#arrow)" />
+
+                                        <!-- Step 5 -->
+                                        <g transform="translate(320, 95)">
+                                            <rect width="120" height="50" rx="6" fill="#0f172a" stroke="#334155"
+                                                stroke-width="1.5" />
+                                            <text x="60" y="22" text-anchor="middle" fill="#f1f5f9" font-size="10.5"
+                                                font-weight="600">5. Deployment</text>
+                                            <text x="60" y="38" text-anchor="middle" fill="#64748b" font-size="9">Docker
+                                                Containers</text>
+                                        </g>
+                                        <path d="M 320 120 L 290 120" stroke="#475569" stroke-width="1.5"
+                                            marker-end="url(#arrow)" />
+
+                                        <!-- Step 6 -->
+                                        <g transform="translate(160, 95)">
+                                            <rect width="120" height="50" rx="6" fill="#0f172a" stroke="#334155"
+                                                stroke-width="1.5" />
+                                            <text x="60" y="22" text-anchor="middle" fill="#f1f5f9" font-size="10.5"
+                                                font-weight="600">6. Pengujian</text>
+                                            <text x="60" y="38" text-anchor="middle" fill="#64748b" font-size="9">Load &
+                                                Benchmarking</text>
+                                        </g>
+                                        <path d="M 160 120 L 130 120" stroke="#475569" stroke-width="1.5"
+                                            marker-end="url(#arrow)" />
+
+                                        <!-- Step 7 -->
+                                        <g transform="translate(10, 95)">
+                                            <rect width="110" height="50" rx="6" fill="#0f172a" stroke="#334155"
+                                                stroke-width="1.5" />
+                                            <text x="55" y="22" text-anchor="middle" fill="#f1f5f9" font-size="10.5"
+                                                font-weight="600">7. Analisis Hasil</text>
+                                            <text x="55" y="38" text-anchor="middle" fill="#64748b"
+                                                font-size="9">Perbandingan Metrik</text>
+                                        </g>
+                                    </svg>
+                                </div>
+                                <span class="text-xs text-slate-500 italic text-center">Gambar 2. Arsitektur Sistem
+                                    Microservices</span>
+                            </div>
+
+                            <p class="mb-4">Tahapan penelitian dilakukan secara sistematis mulai dari analisis kebutuhan
+                                sistem, perancangan arsitektur microservices, implementasi layanan menggunakan REST API
+                                dan gRPC, proses deployment menggunakan Docker, hingga tahap pengujian benchmark
+                                menggunakan tools pengujian performa <a href="#ref-3"
+                                    class="text-cyan-400 hover:underline">[3]</a>. Adapun alur penelitian dapat
+                                dijelaskan sebagai berikut:</p>
+                            <ul class="list-disc pl-5 mb-5 space-y-1.5">
+                                <li><strong>a. Studi Literatur:</strong> Tahap awal penelitian dilakukan dengan
+                                    mempelajari berbagai jurnal, artikel ilmiah, dan dokumentasi resmi mengenai
+                                    arsitektur microservices, REST API, gRPC, HTTP/2, serta benchmark sistem
+                                    terdistribusi <a href="#ref-4" class="text-cyan-400 hover:underline">[4]</a>.</li>
+                                <li><strong>b. Analisis Kebutuhan:</strong> Pada tahap ini dilakukan identifikasi
+                                    kebutuhan perangkat keras dan perangkat lunak yang digunakan dalam penelitian <a
+                                        href="#ref-5" class="text-cyan-400 hover:underline">[5]</a>. Sistem dibangun
+                                    menggunakan framework NestJS dan database MySQL.</li>
+                                <li><strong>c. Perancangan Arsitektur Microservice:</strong> Sistem dirancang
+                                    menggunakan konsep microservices dengan memisahkan layanan menjadi beberapa service
+                                    independen yang saling berkomunikasi menggunakan REST API dan gRPC <a href="#ref-6"
+                                        class="text-cyan-400 hover:underline">[6]</a>.</li>
+                                <li><strong>d. Implementasi Sistem:</strong> Implementasi dilakukan dengan membuat dua
+                                    jenis komunikasi antar layanan yaitu REST API berbasis HTTP/1.1 dan gRPC berbasis
+                                    HTTP/2 <a href="#ref-7" class="text-cyan-400 hover:underline">[7]</a>.</li>
+                                <li><strong>e. Pengujian Benchmark:</strong> Pengujian benchmark dilakukan menggunakan
+                                    skenario concurrent request untuk mengetahui performa komunikasi antar layanan <a
+                                        href="#ref-8" class="text-cyan-400 hover:underline">[8]</a>.</li>
+                                <li><strong>f. Analisis Hasil:</strong> Tahap akhir penelitian dilakukan dengan
+                                    membandingkan hasil benchmark antara REST API dan gRPC berdasarkan parameter
+                                    pengujian yang telah ditentukan <a href="#ref-9"
+                                        class="text-cyan-400 hover:underline">[9]</a>.</li>
+                            </ul>
+
+                            <h4 class="font-bold text-slate-200 mb-2">2.2 Arsitektur Sistem</h4>
+                            <p class="mb-4">Arsitektur sistem pada penelitian ini menggunakan pendekatan microservices
+                                yang terdiri dari beberapa layanan independen seperti authentication service, user
+                                service, dan communication service <a href="#ref-10"
+                                    class="text-cyan-400 hover:underline">[10]</a>. Setiap layanan berjalan pada
+                                container yang berbeda menggunakan Docker sehingga memudahkan proses deployment dan
+                                scalability <a href="#ref-11" class="text-cyan-400 hover:underline">[11]</a>.</p>
+
+                            <!-- Figure 3 -->
+                            <div
+                                class="bg-slate-950/40 border border-slate-800 rounded-xl p-4 my-6 flex flex-col items-center gap-4">
+                                <div class="w-full max-w-lg">
+                                    <svg viewBox="0 0 600 180" class="w-full">
+                                        <!-- Client Node -->
+                                        <g transform="translate(40, 90)">
+                                            <circle r="30" fill="#1e293b" stroke="#334155" stroke-width="2" />
+                                            <text text-anchor="middle" y="4" fill="#f1f5f9" font-size="10"
+                                                font-weight="600">Client</text>
+                                        </g>
+
+                                        <!-- API Gateway -->
+                                        <g transform="translate(190, 90)">
+                                            <rect x="-40" y="-25" width="80" height="50" rx="5" fill="#0f172a"
+                                                stroke="#00f2fe" stroke-width="1.5" />
+                                            <text text-anchor="middle" y="0" fill="#00f2fe" font-size="10"
+                                                font-weight="600">Gateway</text>
+                                            <text text-anchor="middle" y="14" fill="#64748b" font-size="8">(NestJS
+                                                REST)</text>
+                                        </g>
+
+                                        <!-- User Service -->
+                                        <g transform="translate(380, 40)">
+                                            <rect x="-50" y="-20" width="100" height="40" rx="5" fill="#0f172a"
+                                                stroke="#334155" stroke-width="1.5" />
+                                            <text text-anchor="middle" y="4" fill="#f1f5f9" font-size="9.5"
+                                                font-weight="600">User Service</text>
+                                        </g>
+
+                                        <!-- Order Service -->
+                                        <g transform="translate(380, 140)">
+                                            <rect x="-50" y="-20" width="100" height="40" rx="5" fill="#0f172a"
+                                                stroke="#334155" stroke-width="1.5" />
+                                            <text text-anchor="middle" y="4" fill="#f1f5f9" font-size="9.5"
+                                                font-weight="600">Order Service</text>
+                                        </g>
+
+                                        <!-- DB -->
+                                        <g transform="translate(530, 90)">
+                                            <path d="M-20,-20 C-20,-25 20,-25 20,-20 L20,20 C20,25 -20,25 -20,20 Z"
+                                                fill="#0f172a" stroke="#334155" stroke-width="1.5" />
+                                            <ellipse cx="0" cy="-20" rx="20" ry="5" fill="#1e293b" stroke="#334155"
+                                                stroke-width="1.5" />
+                                            <text text-anchor="middle" y="5" fill="#94a3b8" font-size="9">MySQL</text>
+                                        </g>
+
+                                        <!-- Links -->
+                                        <line x1="70" y1="90" x2="150" y2="90" stroke="#475569" stroke-width="1.5"
+                                            marker-end="url(#arrow)" />
+
+                                        <!-- Top communication link (REST/gRPC) -->
+                                        <path d="M 230 90 L 300 40 L 330 40" stroke="#ff5e62" stroke-width="1.5"
+                                            marker-end="url(#arrow)" fill="none" />
+                                        <text x="260" y="52" fill="#ff5e62" font-size="8" font-weight="600">REST
+                                            (HTTP/1.1)</text>
+
+                                        <!-- Bottom communication link -->
+                                        <path d="M 230 90 L 300 140 L 330 140" stroke="#00f2fe" stroke-width="1.5"
+                                            marker-end="url(#arrow)" fill="none" />
+                                        <text x="260" y="132" fill="#00f2fe" font-size="8" font-weight="600">gRPC
+                                            (HTTP/2)</text>
+
+                                        <!-- Service to DB links -->
+                                        <path d="M 430 40 L 490 70 L 510 80" stroke="#475569" stroke-dasharray="2,2"
+                                            stroke-width="1" fill="none" marker-end="url(#arrow)" />
+                                        <path d="M 430 140 L 490 110 L 510 100" stroke="#475569" stroke-dasharray="2,2"
+                                            stroke-width="1" fill="none" marker-end="url(#arrow)" />
+                                    </svg>
+                                </div>
+                                <span class="text-xs text-slate-500 italic text-center">Gambar 3. Alur Komunikasi REST
+                                    API dan gRPC</span>
+                            </div>
+
+                            <p class="mb-4">Komunikasi antar layanan dilakukan menggunakan dua metode yaitu REST API dan
+                                gRPC. REST API menggunakan format data JSON melalui protokol HTTP/1.1, sedangkan gRPC
+                                menggunakan Protocol Buffers dengan protokol HTTP/2 <a href="#ref-12"
+                                    class="text-cyan-400 hover:underline">[12]</a>.</p>
+
+                            <!-- Table 1: Perbandingan -->
+                            <div class="my-6 border border-slate-800 rounded-xl overflow-hidden shadow-lg">
+                                <table class="w-full text-left text-xs border-collapse">
+                                    <caption
+                                        class="bg-slate-900 px-4 py-3 font-semibold text-slate-300 text-center border-b border-slate-800">
+                                        Tabel 1. Perbandingan REST API dan gRPC</caption>
+                                    <thead>
+                                        <tr class="bg-slate-950 text-slate-400 border-b border-slate-800">
+                                            <th class="py-2.5 px-4 font-semibold">Parameter</th>
+                                            <th class="py-2.5 px-4 font-semibold">REST API</th>
+                                            <th class="py-2.5 px-4 font-semibold">gRPC</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="text-slate-400 divide-y divide-slate-800/60">
+                                        <tr class="hover:bg-slate-900/30">
+                                            <td class="py-2.5 px-4 font-semibold">Protocol</td>
+                                            <td class="py-2.5 px-4">HTTP/1.1</td>
+                                            <td class="py-2.5 px-4">HTTP/2</td>
+                                        </tr>
+                                        <tr class="hover:bg-slate-900/30">
+                                            <td class="py-2.5 px-4 font-semibold">Format Data</td>
+                                            <td class="py-2.5 px-4">JSON (Textual)</td>
+                                            <td class="py-2.5 px-4">Protocol Buffers (Binary)</td>
+                                        </tr>
+                                        <tr class="hover:bg-slate-900/30">
+                                            <td class="py-2.5 px-4 font-semibold">Kecepatan</td>
+                                            <td class="py-2.5 px-4">Sedang</td>
+                                            <td class="py-2.5 px-4">Tinggi</td>
+                                        </tr>
+                                        <tr class="hover:bg-slate-900/30">
+                                            <td class="py-2.5 px-4 font-semibold">Ukuran Data</td>
+                                            <td class="py-2.5 px-4">Lebih Besar</td>
+                                            <td class="py-2.5 px-4">Lebih Kecil</td>
+                                        </tr>
+                                        <tr class="hover:bg-slate-900/30">
+                                            <td class="py-2.5 px-4 font-semibold">Streaming</td>
+                                            <td class="py-2.5 px-4">Tidak Optimal</td>
+                                            <td class="py-2.5 px-4">Mendukung</td>
+                                        </tr>
+                                        <tr class="hover:bg-slate-900/30">
+                                            <td class="py-2.5 px-4 font-semibold">Latensi</td>
+                                            <td class="py-2.5 px-4">Lebih Tinggi</td>
+                                            <td class="py-2.5 px-4">Lebih Rendah</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <h4 class="font-bold text-slate-200 mb-2">2.3 Skenario Pengujian</h4>
+                            <p class="mb-4">Pengujian dilakukan menggunakan beberapa skenario concurrent request untuk
+                                mengetahui performa sistem pada kondisi beban yang berbeda <a href="#ref-13"
+                                    class="text-cyan-400 hover:underline">[13]</a>. Jumlah request yang digunakan pada
+                                pengujian yaitu 100 request, 500 request, 1000 request, dan 5000 request.</p>
+                            <p class="mb-4">Parameter yang diuji dalam penelitian ini meliputi:</p>
+                            <ul class="list-disc pl-5 space-y-1">
+                                <li><strong>a. Response Time:</strong> Waktu yang dibutuhkan sistem untuk memberikan
+                                    respon terhadap request pengguna <a href="#ref-15"
+                                        class="text-cyan-400 hover:underline">[15]</a>.</li>
+                                <li><strong>b. Throughput:</strong> Jumlah request yang berhasil diproses sistem dalam
+                                    satu detik <a href="#ref-16" class="text-cyan-400 hover:underline">[16]</a>.</li>
+                                <li><strong>c. Latensi:</strong> Waktu keterlambatan komunikasi antar layanan <a
+                                        href="#ref-17" class="text-cyan-400 hover:underline">[17]</a>.</li>
+                                <li><strong>d. Penggunaan CPU:</strong> Jumlah penggunaan sumber daya CPU selama proses
+                                    komunikasi berlangsung <a href="#ref-18"
+                                        class="text-cyan-400 hover:underline">[18]</a>.</li>
+                                <li><strong>e. Penggunaan Memori:</strong> Jumlah penggunaan memori pada masing-masing
+                                    metode komunikasi <a href="#ref-19" class="text-cyan-400 hover:underline">[19]</a>.
+                                </li>
+                            </ul>
+                        </section>
+
+                        <!-- 3. HASIL DAN PEMBAHASAN -->
+                        <section class="mb-10 text-sm leading-relaxed text-slate-400 text-justify" id="paper-hasil">
+                            <h3 class="text-base font-bold text-slate-100 mt-6 mb-4 pb-1.5 border-b border-slate-800">3.
+                                HASIL DAN PEMBAHASAN</h3>
+
+                            <h4 class="font-bold text-slate-200 mb-2">3.1 Hasil Pengujian Benchmark (Response Time)</h4>
+                            <p class="mb-4">Hasil pengujian benchmark menunjukkan bahwa gRPC memiliki performa yang
+                                lebih baik dibandingkan REST API pada sebagian besar parameter pengujian. Pengujian
+                                dilakukan menggunakan beberapa skenario concurrent request untuk mengetahui kemampuan
+                                sistem dalam menangani beban tinggi <a href="#ref-21"
+                                    class="text-cyan-400 hover:underline">[21]</a>.</p>
+
+                            <!-- Table 2: Response Time -->
+                            <div class="my-6 border border-slate-800 rounded-xl overflow-hidden shadow-lg">
+                                <table class="w-full text-left text-xs border-collapse">
+                                    <caption
+                                        class="bg-slate-900 px-4 py-3 font-semibold text-slate-300 text-center border-b border-slate-800">
+                                        Tabel 2. Hasil Pengujian Response Time</caption>
+                                    <thead>
+                                        <tr class="bg-slate-950 text-slate-400 border-b border-slate-800">
+                                            <th class="py-2.5 px-4 font-semibold">Jumlah Request</th>
+                                            <th class="py-2.5 px-4 font-semibold text-rose-400">REST API (HTTP/1.1)</th>
+                                            <th class="py-2.5 px-4 font-semibold text-cyan-400">gRPC (HTTP/2)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="text-slate-400 divide-y divide-slate-800/60">
+                                        <tr class="hover:bg-slate-900/30">
+                                            <td class="py-2.5 px-4 font-semibold">100</td>
+                                            <td class="py-2.5 px-4" id="paper-rest-rt-100">120 ms</td>
+                                            <td class="py-2.5 px-4" id="paper-grpc-rt-100">80 ms</td>
+                                        </tr>
+                                        <tr class="hover:bg-slate-900/30">
+                                            <td class="py-2.5 px-4 font-semibold">500</td>
+                                            <td class="py-2.5 px-4" id="paper-rest-rt-500">240 ms</td>
+                                            <td class="py-2.5 px-4" id="paper-grpc-rt-500">150 ms</td>
+                                        </tr>
+                                        <tr class="hover:bg-slate-900/30">
+                                            <td class="py-2.5 px-4 font-semibold">1000</td>
+                                            <td class="py-2.5 px-4" id="paper-rest-rt-1000">430 ms</td>
+                                            <td class="py-2.5 px-4" id="paper-grpc-rt-1000">260 ms</td>
+                                        </tr>
+                                        <tr class="hover:bg-slate-900/30">
+                                            <td class="py-2.5 px-4 font-semibold">5000</td>
+                                            <td class="py-2.5 px-4" id="paper-rest-rt-5000">920 ms</td>
+                                            <td class="py-2.5 px-4" id="paper-grpc-rt-5000">540 ms</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <p class="mb-4">Berdasarkan hasil pengujian pada Tabel 2, gRPC menunjukkan nilai response
+                                time yang lebih rendah dibandingkan REST API. Hal ini terjadi karena gRPC menggunakan
+                                Protocol Buffers yang memiliki ukuran data lebih kecil dibandingkan format JSON pada
+                                REST API <a href="#ref-23" class="text-cyan-400 hover:underline">[23]</a>.</p>
+
+                            <!-- Graphic 1: Response Time (Scientific Image) -->
+                            <div class="my-6 text-center">
+                                <img src="/assets/chart_response_time-Z4hv2TiS.png" alt="Grafik Perbandingan Response Time"
+                                    class="mx-auto max-w-sm rounded-lg border border-slate-800 shadow-xl bg-white p-2">
+                                <p class="text-xs text-slate-500 italic mt-2">Gambar 4. Grafik Perbandingan Response
+                                    Time (ms) terhadap Jumlah Request</p>
+                            </div>
+
+                            <h4 class="font-bold text-slate-200 mb-2">3.2 Analisis Throughput</h4>
+                            <p class="mb-4">Throughput merupakan jumlah request yang berhasil diproses sistem dalam satu
+                                detik <a href="#ref-24" class="text-cyan-400 hover:underline">[24]</a>. Berdasarkan
+                                hasil pengujian, gRPC mampu memproses request lebih banyak dibandingkan REST API.</p>
+
+                            <!-- Table 3: Throughput -->
+                            <div class="my-6 border border-slate-800 rounded-xl overflow-hidden shadow-lg">
+                                <table class="w-full text-left text-xs border-collapse">
+                                    <caption
+                                        class="bg-slate-900 px-4 py-3 font-semibold text-slate-300 text-center border-b border-slate-800">
+                                        Tabel 3. Hasil Pengujian Throughput</caption>
+                                    <thead>
+                                        <tr class="bg-slate-950 text-slate-400 border-b border-slate-800">
+                                            <th class="py-2.5 px-4 font-semibold">Jumlah Request</th>
+                                            <th class="py-2.5 px-4 font-semibold text-rose-400">REST API (HTTP/1.1)</th>
+                                            <th class="py-2.5 px-4 font-semibold text-cyan-400">gRPC (HTTP/2)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="text-slate-400 divide-y divide-slate-800/60">
+                                        <tr class="hover:bg-slate-900/30">
+                                            <td class="py-2.5 px-4 font-semibold">100</td>
+                                            <td class="py-2.5 px-4" id="paper-rest-tp-100">850 req/s</td>
+                                            <td class="py-2.5 px-4" id="paper-grpc-tp-100">1200 req/s</td>
+                                        </tr>
+                                        <tr class="hover:bg-slate-900/30">
+                                            <td class="py-2.5 px-4 font-semibold">500</td>
+                                            <td class="py-2.5 px-4" id="paper-rest-tp-500">720 req/s</td>
+                                            <td class="py-2.5 px-4" id="paper-grpc-tp-500">1100 req/s</td>
+                                        </tr>
+                                        <tr class="hover:bg-slate-900/30">
+                                            <td class="py-2.5 px-4 font-semibold">1000</td>
+                                            <td class="py-2.5 px-4" id="paper-rest-tp-1000">600 req/s</td>
+                                            <td class="py-2.5 px-4" id="paper-grpc-tp-1000">980 req/s</td>
+                                        </tr>
+                                        <tr class="hover:bg-slate-900/30">
+                                            <td class="py-2.5 px-4 font-semibold">5000</td>
+                                            <td class="py-2.5 px-4" id="paper-rest-tp-5000">420 req/s</td>
+                                            <td class="py-2.5 px-4" id="paper-grpc-tp-5000">810 req/s</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <p class="mb-4">Penggunaan HTTP/2 pada gRPC memungkinkan proses multiplexing sehingga
+                                komunikasi antar layanan menjadi lebih efisien <a href="#ref-26"
+                                    class="text-cyan-400 hover:underline">[26]</a>.</p>
+
+                            <!-- Graphic 2: Throughput (Scientific Image) -->
+                            <div class="my-6 text-center">
+                                <img src="/assets/chart_throughput-CrcCZ2b4.png" alt="Grafik Perbandingan Throughput"
+                                    class="mx-auto max-w-sm rounded-lg border border-slate-800 shadow-xl bg-white p-2">
+                                <p class="text-xs text-slate-500 italic mt-2">Gambar 5. Grafik Perbandingan Throughput
+                                    (req/s) terhadap Jumlah Request</p>
+                            </div>
+
+                            <h4 class="font-bold text-slate-200 mb-2">3.3 Analisis Pengujian CPU dan Memori</h4>
+                            <p class="mb-4">Pengujian penggunaan CPU dan memori dilakukan untuk mengetahui efisiensi
+                                penggunaan sumber daya sistem <a href="#ref-27"
+                                    class="text-cyan-400 hover:underline">[27]</a>. Hasil pengujian menunjukkan bahwa
+                                gRPC menggunakan sumber daya lebih rendah dibandingkan REST API.</p>
+
+                            <!-- Table 4: Resource Usage -->
+                            <div class="my-6 border border-slate-800 rounded-xl overflow-hidden shadow-lg">
+                                <table class="w-full text-left text-xs border-collapse">
+                                    <caption
+                                        class="bg-slate-900 px-4 py-3 font-semibold text-slate-300 text-center border-b border-slate-800">
+                                        Tabel 4. Hasil Pengujian Penggunaan CPU &amp; Memori (Rata-rata Seluruh Beban)
+                                    </caption>
+                                    <thead>
+                                        <tr class="bg-slate-950 text-slate-400 border-b border-slate-800">
+                                            <th class="py-2.5 px-4 font-semibold">Metode Komunikasi</th>
+                                            <th class="py-2.5 px-4 font-semibold text-rose-400">Average CPU Usage (%)
+                                            </th>
+                                            <th class="py-2.5 px-4 font-semibold text-cyan-400">Average Memory Usage
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="text-slate-400 divide-y divide-slate-800/60">
+                                        <tr class="hover:bg-slate-900/30">
+                                            <td class="py-2.5 px-4 font-semibold">REST API</td>
+                                            <td class="py-2.5 px-4" id="paper-rest-cpu-avg">60%</td>
+                                            <td class="py-2.5 px-4" id="paper-rest-mem-avg">435 MB</td>
+                                        </tr>
+                                        <tr class="hover:bg-slate-900/30">
+                                            <td class="py-2.5 px-4 font-semibold">gRPC</td>
+                                            <td class="py-2.5 px-4" id="paper-grpc-cpu-avg">41%</td>
+                                            <td class="py-2.5 px-4" id="paper-grpc-mem-avg">320 MB</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Graphic 3: CPU Usage (Scientific Image) -->
+                            <div class="my-6 text-center">
+                                <img src="/assets/chart_cpu-BhLIjnXw.png" alt="Grafik Penggunaan CPU"
+                                    class="mx-auto max-w-sm rounded-lg border border-slate-800 shadow-xl bg-white p-2">
+                                <p class="text-xs text-slate-500 italic mt-2">Gambar 6. Grafik Penggunaan CPU (%)
+                                    terhadap Jumlah Request</p>
+                            </div>
+
+                            <!-- Graphic 4: Memory Usage (Scientific Image) -->
+                            <div class="my-6 text-center">
+                                <img src="/assets/chart_memory-D_hOql7u.png" alt="Grafik Penggunaan Memori"
+                                    class="mx-auto max-w-sm rounded-lg border border-slate-800 shadow-xl bg-white p-2">
+                                <p class="text-xs text-slate-500 italic mt-2">Gambar 7. Grafik Penggunaan Memori (MB)
+                                    terhadap Jumlah Request</p>
+                            </div>
+
+                            <p class="mb-4">Penggunaan Protocol Buffers pada gRPC menyebabkan proses serialisasi data
+                                menjadi lebih ringan sehingga penggunaan sumber daya sistem dapat dikurangi secara
+                                signifikan.</p>
+
+                            <h4 class="font-bold text-slate-200 mb-2">3.4 Analisis Performa dan Pembahasan Umum</h4>
+                            <p class="mb-4">Hasil penelitian menunjukkan bahwa gRPC memiliki performa komunikasi yang
+                                lebih baik dibandingkan REST API pada arsitektur microservices. Penggunaan HTTP/2 dan
+                                Protocol Buffers memungkinkan proses komunikasi berjalan lebih cepat dan efisien.</p>
+                            <p class="mb-4">Meskipun demikian, REST API masih memiliki beberapa kelebihan seperti
+                                kemudahan implementasi dan kompatibilitas yang lebih luas. REST API juga lebih mudah
+                                digunakan pada aplikasi berbasis web karena dukungan browser yang sangat baik.</p>
+                            <p class="mb-4">Pada implementasi sistem berskala besar dengan kebutuhan komunikasi
+                                real-time dan throughput tinggi, gRPC menjadi solusi yang lebih optimal dibandingkan
+                                REST API. Namun, untuk aplikasi sederhana dengan kebutuhan integrasi yang luas, REST API
+                                masih menjadi pilihan yang efektif.</p>
+                        </section>
+
+                        <!-- 4. KESIMPULAN -->
+                        <section class="mb-10 text-sm leading-relaxed text-slate-400 text-justify"
+                            id="paper-kesimpulan">
+                            <h3 class="text-base font-bold text-slate-100 mt-6 mb-4 pb-1.5 border-b border-slate-800">4.
+                                KESIMPULAN</h3>
+                            <p class="mb-4">Berdasarkan hasil penelitian yang telah dilakukan, dapat disimpulkan bahwa
+                                gRPC memiliki performa komunikasi yang lebih baik dibandingkan REST API pada arsitektur
+                                microservices. Hasil benchmark menunjukkan bahwa gRPC menghasilkan response time lebih
+                                rendah, throughput lebih tinggi, serta penggunaan CPU dan memori yang lebih efisien
+                                dibandingkan REST API.</p>
+                            <p class="mb-4">Penggunaan HTTP/2 dan Protocol Buffers menjadi faktor utama yang
+                                meningkatkan performa gRPC dalam komunikasi antar layanan. Selain itu, gRPC juga
+                                mendukung komunikasi streaming dan multiplexing sehingga sangat cocok digunakan pada
+                                sistem terdistribusi modern dengan kebutuhan komunikasi data secara cepat dan real-time.
+                            </p>
+                            <p class="mb-4">Meskipun demikian, REST API tetap memiliki keunggulan dalam kemudahan
+                                implementasi, kompatibilitas, dan integrasi dengan berbagai platform. Oleh karena itu,
+                                pemilihan metode komunikasi harus disesuaikan dengan kebutuhan dan karakteristik sistem
+                                yang dikembangkan.</p>
+                            <p class="mb-4">Penelitian ini diharapkan dapat menjadi referensi bagi pengembang perangkat
+                                lunak dalam menentukan metode komunikasi yang optimal pada pengembangan sistem berbasis
+                                microservices.</p>
+                        </section>
+
+                        <!-- UCAPAN TERIMA KASIH -->
+                        <section class="mb-10 text-sm leading-relaxed text-slate-400 text-justify" id="paper-ucapan">
+                            <h3 class="text-base font-bold text-slate-100 mt-6 mb-4 pb-1.5 border-b border-slate-800">
+                                UCAPAN TERIMA KASIH</h3>
+                            <p>Penulis mengucapkan terima kasih kepada pihak kampus, dosen pembimbing, dan seluruh pihak
+                                yang telah memberikan dukungan selama proses penelitian berlangsung. Penulis juga
+                                mengucapkan terima kasih kepada komunitas pengembang teknologi microservices yang telah
+                                menyediakan berbagai dokumentasi dan referensi ilmiah sehingga penelitian ini dapat
+                                diselesaikan dengan baik.</p>
+                        </section>
+
+                        <!-- REFERENCES -->
+                        <section class="mb-6 text-xs leading-relaxed text-slate-400 text-left" id="paper-referensi">
+                            <h3 class="text-base font-bold text-slate-100 mt-6 mb-4 pb-1.5 border-b border-slate-800">
+                                REFERENCES</h3>
+                            <ol class="list-decimal pl-5 space-y-2">
+                                <li id="ref-1">[1] N. Dragoni et al., “Microservices: Yesterday, Today, and Tomorrow,”
+                                    Present and Ulterior Software Engineering, pp. 195–216, 2021.</li>
+                                <li id="ref-2">[2] S. Newman, Building Microservices, 2nd ed. California: O’Reilly
+                                    Media, 2021.</li>
+                                <li id="ref-3">[3] W. Kleppmann, Designing Data-Intensive Applications. California:
+                                    O’Reilly Media, 2022.</li>
+                                <li id="ref-4">[4] Y. Gan et al., “An Open-Source Benchmark Suite for Microservices and
+                                    Their Hardware-Software Implications,” ASPLOS, pp. 3–18, 2022.</li>
+                                <li id="ref-5">[5] A. Balalaie, A. Heydarnoori, and P. Jamshidi, “Microservices
+                                    Architecture Enables DevOps,” IEEE Software, vol. 39, no. 3, pp. 42–52, 2021.</li>
+                                <li id="ref-6">[6] R. Buyya, Cloud Computing and Distributed Systems. New Jersey: Wiley,
+                                    2021.</li>
+                                <li id="ref-7">[7] Google, “gRPC Documentation,” 2024.</li>
+                                <li id="ref-8">[8] Postman, “API Performance Testing Guide,” 2023.</li>
+                                <li id="ref-9">[9] M. Fowler, “Microservices Resource Guide,” 2022.</li>
+                                <li id="ref-10">[10] C. Richardson, Microservices Patterns. New York: Manning
+                                    Publications, 2021.</li>
+                                <li id="ref-11">[11] Docker Inc., “Docker Documentation,” 2024.</li>
+                                <li id="ref-12">[12] Google, “Protocol Buffers Documentation,” 2024.</li>
+                                <li id="ref-13">[13] J. Thönes, “Microservices,” IEEE Software, vol. 32, no. 1, pp.
+                                    116–116, 2021.</li>
+                                <li id="ref-14">[14] M. Villamizar et al., “Evaluating the Monolithic and the
+                                    Microservice Architecture Pattern,” Computing, vol. 104, no. 2, pp. 321–340, 2022.
+                                </li>
+                                <li id="ref-15">[15] H. Zhang et al., “Benchmarking REST and gRPC Communication,” Future
+                                    Generation Computer Systems, vol. 128, pp. 1–12, 2023.</li>
+                                <li id="ref-16">[16] L. Liu et al., “Performance Analysis of gRPC and RESTful Services,”
+                                    IEEE Access, vol. 11, pp. 4412–4425, 2023.</li>
+                                <li id="ref-17">[17] T. Erl, Service-Oriented Architecture. Pearson Education, 2021.
+                                </li>
+                                <li id="ref-18">[18] P. Jamshidi et5 al., “Microservices: The Journey So Far and
+                                    Challenges Ahead,” IEEE Software, vol. 38, no. 1, pp. 24–35, 2021.</li>
+                                <li id="ref-19">[19] A. Taibi and V. Lenarduzzi, “On the Definition of Microservice Bad
+                                    Smells,” IEEE Software, vol. 39, no. 3, pp. 56–62, 2022.</li>
+                                <li id="ref-20">[20] H. Kim et al., “Performance Evaluation of HTTP/2 and gRPC,” Journal
+                                    of Systems Architecture, vol. 133, pp. 102–118, 2023.</li>
+                                <li id="ref-21">[21] M. Soldani et al., “API Communication in Microservices,” IEEE
+                                    Access, vol. 10, pp. 55623–55635, 2022.</li>
+                                <li id="ref-22">[22] E. Gamma et al., Design Patterns: Elements of Reusable
+                                    Object-Oriented Software. Addison-Wesley, 2021.</li>
+                                <li id="ref-23">[23] R. Fielding, “Architectural Styles and the Design of Network-based
+                                    Software Architectures,” Doctoral Dissertation, University of California, 2021.</li>
+                                <li id="ref-24">[24] K. Hightower et al., Kubernetes: Up and Running, 3rd ed. O’Reilly
+                                    Media, 2022.</li>
+                                <li id="ref-25">[25] J. Lewis and M. Fowler, “Microservices: A Definition of This New
+                                    Architectural Term,” 2021.</li>
+                                <li id="ref-26">[26] S. Vinoski, “Advanced Message Queuing Protocol,” IEEE Internet
+                                    Computing, vol. 26, no. 2, pp. 87–91, 2022.</li>
+                                <li id="ref-27">[27] D. Bernstein, “Containers and Cloud: From LXC to Docker to
+                                    Kubernetes,” IEEE Cloud Computing, vol. 9, no. 4, pp. 81–84, 2022.</li>
+                                <li id="ref-28">[28] P. Hintjens, ZeroMQ: Messaging for Many Applications. O’Reilly
+                                    Media, 2021.</li>
+                            </ol>
+                        </section>
+                    </article>
+                </div>
+            </section>
+
+            <!-- SECTION 4: CODE EXPLORER -->
+            <section id="section-code" class="content-section hidden">
+                <div class="text-slate-400 text-base mb-6 max-w-4xl">
+                    Pelajari bagaimana NestJS diimplementasikan untuk menyediakan endpoint REST API dan endpoint gRPC
+                    dalam arsitektur microservices.
+                </div>
+
+                <div
+                    class="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-6 bg-slate-900/60 border border-slate-800 rounded-2xl overflow-hidden min-h-[520px]">
+                    <!-- Left Sidebar tabs for files -->
+                    <div class="bg-slate-950/40 border-r border-slate-800/80 p-4 flex flex-col gap-1">
+                        <div class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1 mb-2 px-3">
+                            Protocol Buffers</div>
+                        <button
+                            class="code-tab-btn active text-left text-xs font-medium px-3 py-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 transition"
+                            data-file="proto-definition">
+                            user.proto
+                        </button>
+
+                        <div class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-4 mb-2 px-3">
+                            NestJS gRPC Service</div>
+                        <button
+                            class="code-tab-btn text-left text-xs font-medium px-3 py-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 transition"
+                            data-file="grpc-main">
+                            main.ts (Server)
+                        </button>
+                        <button
+                            class="code-tab-btn text-left text-xs font-medium px-3 py-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 transition"
+                            data-file="grpc-controller">
+                            user.controller.ts
+                        </button>
+
+                        <div class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-4 mb-2 px-3">
+                            NestJS REST Service</div>
+                        <button
+                            class="code-tab-btn text-left text-xs font-medium px-3 py-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 transition"
+                            data-file="rest-controller">
+                            user.controller.ts
+                        </button>
+
+                        <div class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-4 mb-2 px-3">
+                            Containerization</div>
+                        <button
+                            class="code-tab-btn text-left text-xs font-medium px-3 py-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 transition"
+                            data-file="docker-compose">
+                            docker-compose.yml
+                        </button>
+                    </div>
+
+                    <!-- Code viewer screen -->
+                    <div class="flex flex-col flex-1">
+                        <div
+                            class="bg-slate-950/30 border-b border-slate-800/80 px-6 py-3.5 flex justify-between items-center">
+                            <span class="font-mono text-xs text-slate-400" id="code-filename">user.proto</span>
+                            <button
+                                class="bg-slate-800/50 hover:bg-slate-700/60 text-slate-300 border border-slate-700/60 hover:text-slate-100 font-medium py-1.5 px-3 rounded-lg text-xs transition"
+                                id="btn-copy-code">Copy Code</button>
+                        </div>
+                        <div class="p-6 bg-slate-950 overflow-auto flex-1 flex text-xs">
+                            <pre
+                                class="m-0 font-mono text-slate-300 white-space-pre tab-size-4"><code id="code-content" class="language-javascript">// Code content will be injected by app.js</code></pre>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Custom CSS styles fallback in js script. Styles.css is cleared. -->
+    <style>
+        .nav-item.active {
+            color: #22d3ee !important;
+            background-color: rgba(34, 211, 238, 0.1) !important;
+            border-color: rgba(34, 211, 238, 0.25) !important;
+            font-weight: 600;
+            box-shadow: 0 4px 20px rgba(34, 211, 238, 0.05);
+        }
+
+        .code-tab-btn.active {
+            background-color: rgba(255, 255, 255, 0.05);
+            color: #22d3ee !important;
+            font-weight: 600;
+        }
+    </style>
+    <!-- Scripts -->
+    <script src="app.js"></script>
+</body>
+
+</html>

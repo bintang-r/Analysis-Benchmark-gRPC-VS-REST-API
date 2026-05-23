@@ -1,0 +1,25 @@
+{
+  "name": "analisis-benchmark-grpc-rest",
+  "version": "1.0.0",
+  "description": "Dashboard Interaktif Analisis Benchmark gRPC vs REST API pada Arsitektur Microservices",
+  "main": "index.html",
+  "scripts": {
+    "dev": "vite",
+    "start": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [
+    "grpc",
+    "rest-api",
+    "benchmark",
+    "microservices",
+    "nestjs",
+    "docker"
+  ],
+  "author": "Muhammad Bintang",
+  "license": "ISC",
+  "devDependencies": {
+    "vite": "^5.2.11"
+  }
+}
