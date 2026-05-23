@@ -140,8 +140,8 @@ let simulatorRunning = false;
 let simIntervals = [];
 let simTimeouts = [];
 
-// Initialize Page
-document.addEventListener('DOMContentLoaded', () => {
+// Initialize Page using jQuery
+$(document).ready(() => {
     initCharts();
     initNavigation();
     initCodeExplorer();
@@ -352,83 +352,78 @@ function initCharts() {
     });
 }
 
-// Navigation Logic
+// Navigation Logic using jQuery
 function initNavigation() {
-    const navItems = document.querySelectorAll('.nav-item');
-    const sections = document.querySelectorAll('.content-section');
+    const navItems = $('.nav-item');
+    const sections = $('.content-section');
+    const mainContent = $('main');
 
-    navItems.forEach(item => {
-        item.addEventListener('click', () => {
-            // Remove active classes
-            navItems.forEach(n => n.classList.remove('active'));
-            sections.forEach(s => {
-                s.classList.add('hidden');
-                s.classList.remove('block');
+    navItems.on('click', function() {
+        const $this = $(this);
+        // Remove active classes
+        navItems.removeClass('active');
+        sections.addClass('hidden').removeClass('block');
+
+        // Add active class to clicked item
+        $this.addClass('active');
+
+        // Show corresponding section
+        const targetSection = $('#' + $this.attr('data-target'));
+        if (targetSection.length) {
+            targetSection.removeClass('hidden').addClass('block');
+        }
+
+        // Scroll main content to top
+        mainContent.scrollTop(0);
+
+        // Trigger chart updates if returning to dashboard
+        if ($this.attr('id') === 'btn-nav-dashboard') {
+            Object.values(chartsInstance).forEach(chart => {
+                chart.resize();
+                chart.update('active');
             });
-
-            // Add active class to clicked item
-            item.classList.add('active');
-
-            // Show corresponding section
-            const targetSection = document.getElementById(item.getAttribute('data-target'));
-            if (targetSection) {
-                targetSection.classList.remove('hidden');
-                targetSection.classList.add('block');
-            }
-
-            // Scroll main content to top
-            document.querySelector('main').scrollTop = 0;
-
-            // Trigger chart updates if returning to dashboard
-            if (item.id === 'btn-nav-dashboard') {
-                Object.values(chartsInstance).forEach(chart => {
-                    chart.resize();
-                    chart.update('active');
-                });
-            }
-        });
+        }
     });
 }
 
-// Code Snippet Explorer Logic
+// Code Snippet Explorer Logic using jQuery
 function initCodeExplorer() {
-    const codeTabBtns = document.querySelectorAll('.code-tab-btn');
-    const filenameEl = document.getElementById('code-filename');
-    const codeContentEl = document.getElementById('code-content');
-    const copyBtn = document.getElementById('btn-copy-code');
+    const codeTabBtns = $('.code-tab-btn');
+    const filenameEl = $('#code-filename');
+    const codeContentEl = $('#code-content');
+    const copyBtn = $('#btn-copy-code');
 
     // Load Default Snippet
     loadSnippet('proto-definition');
 
-    codeTabBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            codeTabBtns.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
+    codeTabBtns.on('click', function() {
+        const $this = $(this);
+        codeTabBtns.removeClass('active');
+        $this.addClass('active');
 
-            const fileKey = btn.getAttribute('data-file');
-            loadSnippet(fileKey);
-            filenameEl.textContent = btn.textContent.trim();
-        });
+        const fileKey = $this.attr('data-file');
+        loadSnippet(fileKey);
+        filenameEl.text($this.text().trim());
     });
 
     function loadSnippet(key) {
         if (codeSnippets[key]) {
-            codeContentEl.textContent = codeSnippets[key];
+            codeContentEl.text(codeSnippets[key]);
         }
     }
 
     // Copy to clipboard
-    copyBtn.addEventListener('click', () => {
-        const text = codeContentEl.textContent;
+    copyBtn.on('click', function() {
+        const text = codeContentEl.text();
         navigator.clipboard.writeText(text).then(() => {
-            copyBtn.textContent = 'Copied!';
-            copyBtn.classList.remove('bg-slate-800/50', 'text-slate-300', 'border-slate-700/60');
-            copyBtn.classList.add('bg-emerald-500/10', 'text-emerald-400', 'border-emerald-500/20');
+            copyBtn.text('Copied!');
+            copyBtn.removeClass('bg-slate-800/50 text-slate-300 border-slate-700/60')
+                   .addClass('bg-emerald-500/10 text-emerald-400 border-emerald-500/20');
 
             setTimeout(() => {
-                copyBtn.textContent = 'Copy Code';
-                copyBtn.classList.remove('bg-emerald-500/10', 'text-emerald-400', 'border-emerald-500/20');
-                copyBtn.classList.add('bg-slate-800/50', 'text-slate-300', 'border-slate-700/60');
+                copyBtn.text('Copy Code');
+                copyBtn.removeClass('bg-emerald-500/10 text-emerald-400 border-emerald-500/20')
+                       .addClass('bg-slate-800/50 text-slate-300 border-slate-700/60');
             }, 2000);
         }).catch(err => {
             console.error('Failed to copy text: ', err);
@@ -436,90 +431,79 @@ function initCodeExplorer() {
     });
 }
 
-// Paper Table of Contents Active Highlighting
+// Paper Table of Contents Active Highlighting using jQuery
 function initPaperTOC() {
-    const tocLinks = document.querySelectorAll('.toc-link');
-    const paperSections = document.querySelectorAll('.paper-sub-section');
-    const mainContent = document.querySelector('main');
+    const tocLinks = $('.toc-link');
+    const paperSections = $('.paper-sub-section');
+    const mainContent = $('main');
 
-    tocLinks.forEach(link => {
-        link.addEventListener('click', (e) => {
-            e.preventDefault();
-            const targetId = link.getAttribute('href');
-            const targetSection = document.querySelector(targetId);
+    tocLinks.on('click', function(e) {
+        e.preventDefault();
+        const $this = $(this);
+        const targetId = $this.attr('href');
+        const targetSection = $(targetId);
 
-            if (targetSection) {
-                // Scroll main content to target section
-                const offset = targetSection.offsetTop - 50;
-                mainContent.scrollTo({
-                    top: offset,
-                    behavior: 'smooth'
-                });
+        if (targetSection.length) {
+            // Scroll main content to target section
+            const offset = targetSection.position().top + mainContent.scrollTop() - 50;
+            mainContent.animate({
+                scrollTop: offset
+            }, 500);
 
-                tocLinks.forEach(l => l.classList.remove('active'));
-                link.classList.add('active');
-            }
-        });
+            tocLinks.removeClass('active');
+            $this.addClass('active');
+        }
     });
 
     // Detect scroll position to highlight TOC link
-    mainContent.addEventListener('scroll', () => {
+    mainContent.on('scroll', function() {
         let currentSectionId = '';
-        const scrollPosition = mainContent.scrollTop + 100;
+        const scrollPosition = mainContent.scrollTop() + 100;
 
-        paperSections.forEach(section => {
-            const sectionTop = section.offsetTop;
-            const sectionHeight = section.offsetHeight;
+        paperSections.each(function() {
+            const $sec = $(this);
+            const sectionTop = $sec.position().top + mainContent.scrollTop();
+            const sectionHeight = $sec.outerHeight();
 
             if (scrollPosition >= sectionTop && scrollPosition < (sectionTop + sectionHeight)) {
-                currentSectionId = section.getAttribute('id');
+                currentSectionId = $sec.attr('id');
             }
         });
 
         if (currentSectionId) {
-            tocLinks.forEach(link => {
-                link.classList.remove('active');
-                if (link.getAttribute('href') === `#${currentSectionId}`) {
-                    link.classList.add('active');
-                }
-            });
+            tocLinks.removeClass('active');
+            $(`.toc-link[href="#${currentSectionId}"]`).addClass('active');
         }
     });
 }
 
-// Parameter Controls Input Sync & Chart Update
+// Parameter Controls Input Sync & Chart Update using jQuery
 function initParameterControls() {
-    const inputs = document.querySelectorAll('input[id^="p-"]');
-
-    inputs.forEach(input => {
-        input.addEventListener('input', () => {
-            syncDataFromInputs();
-            updateDashboardUI();
-        });
+    $('input[id^="p-"]').on('input', function() {
+        syncDataFromInputs();
+        updateDashboardUI();
     });
 }
 
 function syncDataFromInputs() {
-    const categories = ['rest', 'grpc'];
-    const metrics = ['rt', 'tp', 'cpu', 'mem'];
     const runs = [100, 500, 1000, 5000];
 
     runs.forEach((run, rIdx) => {
         // Read REST inputs
-        benchmarkData.rest.responseTime[rIdx] = parseFloat(document.getElementById(`p-rest-rt-${run}`).value) || 0;
-        benchmarkData.rest.throughput[rIdx] = parseFloat(document.getElementById(`p-rest-tp-${run}`).value) || 0;
-        benchmarkData.rest.cpu[rIdx] = parseFloat(document.getElementById(`p-rest-cpu-${run}`).value) || 0;
-        benchmarkData.rest.memory[rIdx] = parseFloat(document.getElementById(`p-rest-mem-${run}`).value) || 0;
+        benchmarkData.rest.responseTime[rIdx] = parseFloat($(`#p-rest-rt-${run}`).val()) || 0;
+        benchmarkData.rest.throughput[rIdx] = parseFloat($(`#p-rest-tp-${run}`).val()) || 0;
+        benchmarkData.rest.cpu[rIdx] = parseFloat($(`#p-rest-cpu-${run}`).val()) || 0;
+        benchmarkData.rest.memory[rIdx] = parseFloat($(`#p-rest-mem-${run}`).val()) || 0;
 
         // Read gRPC inputs
-        benchmarkData.grpc.responseTime[rIdx] = parseFloat(document.getElementById(`p-grpc-rt-${run}`).value) || 0;
-        benchmarkData.grpc.throughput[rIdx] = parseFloat(document.getElementById(`p-grpc-tp-${run}`).value) || 0;
-        benchmarkData.grpc.cpu[rIdx] = parseFloat(document.getElementById(`p-grpc-cpu-${run}`).value) || 0;
-        benchmarkData.grpc.memory[rIdx] = parseFloat(document.getElementById(`p-grpc-mem-${run}`).value) || 0;
+        benchmarkData.grpc.responseTime[rIdx] = parseFloat($(`#p-grpc-rt-${run}`).val()) || 0;
+        benchmarkData.grpc.throughput[rIdx] = parseFloat($(`#p-grpc-tp-${run}`).val()) || 0;
+        benchmarkData.grpc.cpu[rIdx] = parseFloat($(`#p-grpc-cpu-${run}`).val()) || 0;
+        benchmarkData.grpc.memory[rIdx] = parseFloat($(`#p-grpc-mem-${run}`).val()) || 0;
     });
 }
 
-// Updates UI Elements & Chart Instances
+// Updates UI Elements & Chart Instances using jQuery
 function updateDashboardUI() {
     // 1. Update card text values
     const lastIdx = benchmarkData.concurrency.length - 1; // 5000 req
@@ -529,33 +513,28 @@ function updateDashboardUI() {
     const restMaxTp = benchmarkData.rest.throughput[lastIdx];
     const grpcMaxTp = benchmarkData.grpc.throughput[lastIdx];
 
-    document.getElementById('val-rest-rt').textContent = `${restMaxRt} ms`;
-    document.getElementById('val-grpc-rt').textContent = `${grpcMaxRt} ms`;
+    $('#val-rest-rt').text(`${restMaxRt} ms`);
+    $('#val-grpc-rt').text(`${grpcMaxRt} ms`);
 
     // Performance diff percentage
     const rtDiffPercent = restMaxRt > 0 ? ((restMaxRt - grpcMaxRt) / restMaxRt * 100).toFixed(1) : 0;
-    document.getElementById('metric-grpc-diff').textContent = `${rtDiffPercent}% Faster`;
-    document.getElementById('txt-latency-diff').textContent = `${restMaxRt - grpcMaxRt} ms`;
-    document.getElementById('txt-rest-rt').textContent = `${restMaxRt} ms`;
+    $('#metric-grpc-diff').text(`${rtDiffPercent}% Faster`);
+    $('#txt-latency-diff').text(`${restMaxRt - grpcMaxRt} ms`);
+    $('#txt-rest-rt').text(`${restMaxRt} ms`);
 
     // Throughput speed ratio
     const tpRatio = restMaxTp > 0 ? (grpcMaxTp / restMaxTp).toFixed(1) : 0;
-    document.getElementById('val-win-ratio').textContent = `${tpRatio}x`;
-    document.getElementById('txt-grpc-tp').textContent = `${grpcMaxTp} req/s`;
-    document.getElementById('txt-rest-tp').textContent = `${restMaxTp} req/s`;
+    $('#val-win-ratio').text(`${tpRatio}x`);
+    $('#txt-grpc-tp').text(`${grpcMaxTp} req/s`);
+    $('#txt-rest-tp').text(`${restMaxTp} req/s`);
 
     // 1.5 Update values inside the Academic Paper (Tabel 2 & Tabel 3)
     const runs = [100, 500, 1000, 5000];
     runs.forEach((run, idx) => {
-        const pRestRt = document.getElementById(`paper-rest-rt-${run}`);
-        const pGrpcRt = document.getElementById(`paper-grpc-rt-${run}`);
-        const pRestTp = document.getElementById(`paper-rest-tp-${run}`);
-        const pGrpcTp = document.getElementById(`paper-grpc-tp-${run}`);
-
-        if (pRestRt) pRestRt.textContent = `${benchmarkData.rest.responseTime[idx]} ms`;
-        if (pGrpcRt) pGrpcRt.textContent = `${benchmarkData.grpc.responseTime[idx]} ms`;
-        if (pRestTp) pRestTp.textContent = `${benchmarkData.rest.throughput[idx]} req/s`;
-        if (pGrpcTp) pGrpcTp.textContent = `${benchmarkData.grpc.throughput[idx]} req/s`;
+        $(`#paper-rest-rt-${run}`).text(`${benchmarkData.rest.responseTime[idx]} ms`);
+        $(`#paper-grpc-rt-${run}`).text(`${benchmarkData.grpc.responseTime[idx]} ms`);
+        $(`#paper-rest-tp-${run}`).text(`${benchmarkData.rest.throughput[idx]} req/s`);
+        $(`#paper-grpc-tp-${run}`).text(`${benchmarkData.grpc.throughput[idx]} req/s`);
     });
 
     // Update dynamic averages inside Paper Tabel 4 (CPU & Memory)
@@ -564,15 +543,10 @@ function updateDashboardUI() {
     const restMemAvg = (benchmarkData.rest.memory.reduce((a, b) => a + b, 0) / 4).toFixed(0);
     const grpcMemAvg = (benchmarkData.grpc.memory.reduce((a, b) => a + b, 0) / 4).toFixed(0);
 
-    const pRestCpuAvg = document.getElementById('paper-rest-cpu-avg');
-    const pGrpcCpuAvg = document.getElementById('paper-grpc-cpu-avg');
-    const pRestMemAvg = document.getElementById('paper-rest-mem-avg');
-    const pGrpcMemAvg = document.getElementById('paper-grpc-mem-avg');
-
-    if (pRestCpuAvg) pRestCpuAvg.textContent = `${restCpuAvg}%`;
-    if (pGrpcCpuAvg) pGrpcCpuAvg.textContent = `${grpcCpuAvg}%`;
-    if (pRestMemAvg) pRestMemAvg.textContent = `${restMemAvg} MB`;
-    if (pGrpcMemAvg) pGrpcMemAvg.textContent = `${grpcMemAvg} MB`;
+    $('#paper-rest-cpu-avg').text(`${restCpuAvg}%`);
+    $('#paper-grpc-cpu-avg').text(`${grpcCpuAvg}%`);
+    $('#paper-rest-mem-avg').text(`${restMemAvg} MB`);
+    $('#paper-grpc-mem-avg').text(`${grpcMemAvg} MB`);
 
     // 2. Refresh Chart Data
     if (chartsInstance.rt) {
@@ -667,32 +641,32 @@ function calculateProtobuf(id, name, email, role) {
 // Global payload size tracker
 window.currentPayloadSizes = { rest: 98, grpc: 66 };
 
-// Interactive Network Simulator Logic
+// // Interactive Network Simulator Logic using jQuery
 function initSimulator() {
-    const runBtn = document.getElementById('btn-run-sim');
-    const resetBtn = document.getElementById('btn-reset-sim');
-    const concurrencySel = document.getElementById('sim-concurrency');
-    const speedSel = document.getElementById('sim-speed');
-    const statusLabel = document.getElementById('sim-status-text');
-    const termLog = document.getElementById('terminal-log-output');
+    const runBtn = $('#btn-run-sim');
+    const resetBtn = $('#btn-reset-sim');
+    const concurrencySel = $('#sim-concurrency');
+    const speedSel = $('#sim-speed');
+    const statusLabel = $('#sim-status-text');
+    const termLog = $('#terminal-log-output');
 
     // Input fields for payload editor
-    const payloadIdInp = document.getElementById('sim-payload-id');
-    const payloadNameInp = document.getElementById('sim-payload-name');
-    const payloadEmailInp = document.getElementById('sim-payload-email');
-    const payloadRoleInp = document.getElementById('sim-payload-role');
+    const payloadIdInp = $('#sim-payload-id');
+    const payloadNameInp = $('#sim-payload-name');
+    const payloadEmailInp = $('#sim-payload-email');
+    const payloadRoleInp = $('#sim-payload-role');
 
     // Stats elements
-    const restBar = document.getElementById('rest-progress-bar');
-    const restTimeEl = document.getElementById('sim-rest-time');
-    const restDoneEl = document.getElementById('sim-rest-done');
+    const restBar = $('#rest-progress-bar');
+    const restTimeEl = $('#sim-rest-time');
+    const restDoneEl = $('#sim-rest-done');
 
-    const grpcBar = document.getElementById('grpc-progress-bar');
-    const grpcTimeEl = document.getElementById('sim-grpc-time');
-    const grpcDoneEl = document.getElementById('sim-grpc-done');
+    const grpcBar = $('#grpc-progress-bar');
+    const grpcTimeEl = $('#sim-grpc-time');
+    const grpcDoneEl = $('#sim-grpc-done');
 
     // Queue text
-    const restQueueText = document.getElementById('sim-rest-queue-text');
+    const restQueueText = $('#sim-rest-queue-text');
 
     // Active state variables for simulation ticks
     let restCompleted = 0;
@@ -712,20 +686,16 @@ function initSimulator() {
     const svgNS = "http://www.w3.org/2000/svg";
 
     // Bind event listeners for real-time payload updates
-    [payloadIdInp, payloadNameInp, payloadEmailInp, payloadRoleInp].forEach(inp => {
-        if (inp) {
-            inp.addEventListener('input', updatePayloadVisuals);
-        }
-    });
+    $('#sim-payload-id, #sim-payload-name, #sim-payload-email, #sim-payload-role').on('input', updatePayloadVisuals);
 
     // Run first update to sync HTML with inputs on load
     updatePayloadVisuals();
 
     function updatePayloadVisuals() {
-        const id = payloadIdInp ? payloadIdInp.value : 'USR-9988223';
-        const name = payloadNameInp ? payloadNameInp.value : 'Muhammad Bintang';
-        const email = payloadEmailInp ? payloadEmailInp.value : 'mbintang23@mhs.unitama.ac.id';
-        const role = payloadRoleInp ? payloadRoleInp.value : 'Administrator';
+        const id = payloadIdInp.length ? payloadIdInp.val() : 'USR-9988223';
+        const name = payloadNameInp.length ? payloadNameInp.val() : 'Muhammad Bintang';
+        const email = payloadEmailInp.length ? payloadEmailInp.val() : 'mbintang23@mhs.unitama.ac.id';
+        const role = payloadRoleInp.length ? payloadRoleInp.val() : 'Administrator';
 
         // 1. REST (JSON) representation and size
         const restObj = { id, name, email, role };
@@ -734,23 +704,18 @@ function initSimulator() {
             .replace(/"(id|name|email|role)"/g, '<span class="text-rose-400">"$1"</span>')
             .replace(/: "(.*)"/g, ': <span class="text-emerald-400">"$1"</span>');
         
-        const restBlock = document.getElementById('rest-payload-block');
-        if (restBlock) restBlock.innerHTML = restColored;
+        $('#rest-payload-block').html(restColored);
 
         const restBytes = new TextEncoder().encode(restJson).length;
-        const restLabel = document.getElementById('rest-payload-size');
-        if (restLabel) restLabel.textContent = `Ukuran Payload: ~${restBytes} bytes (Teks JSON Formatted)`;
+        $('#rest-payload-size').text(`Ukuran Payload: ~${restBytes} bytes (Teks JSON Formatted)`);
 
         // 2. gRPC (Protobuf) representation and size
         const protobufResult = calculateProtobuf(id, name, email, role);
         const grpcColored = `<span class="text-slate-500">// Serialized Binary (Hexadecimal representation)</span>\n` +
             protobufResult.hex.split(' ').map(h => `<span class="text-cyan-400">${h}</span>`).join(' ');
         
-        const grpcBlock = document.getElementById('grpc-payload-block');
-        if (grpcBlock) grpcBlock.innerHTML = grpcColored;
-
-        const grpcLabel = document.getElementById('grpc-payload-size');
-        if (grpcLabel) grpcLabel.textContent = `Ukuran Payload: ~${protobufResult.size} bytes (Biner terkompresi Protobuf)`;
+        $('#grpc-payload-block').html(grpcColored);
+        $('#grpc-payload-size').text(`Ukuran Payload: ~${protobufResult.size} bytes (Biner terkompresi Protobuf)`);
 
         // Save sizes globally
         window.currentPayloadSizes = {
@@ -759,15 +724,15 @@ function initSimulator() {
         };
     }
 
-    resetBtn.addEventListener('click', resetSimulation);
+    resetBtn.on('click', resetSimulation);
 
-    runBtn.addEventListener('click', () => {
+    runBtn.on('click', () => {
         if (simulatorRunning) return;
         runSimulation();
     });
 
     function logToTerminal(message, type = 'sys') {
-        const span = document.createElement('span');
+        const $span = $('<span>');
         const now = new Date();
         const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}.${now.getMilliseconds().toString().padStart(3, '0')}`;
 
@@ -777,23 +742,21 @@ function initSimulator() {
         else if (type === 'grpc') typeSpan = `<span class="text-cyan-400">[gRPC-HTTP/2]</span>`;
         else if (type === 'warn') typeSpan = `<span class="text-yellow-500">[WARN]</span>`;
 
-        span.innerHTML = `[${timeStr}] ${typeSpan} ${message}<br>`;
-        termLog.appendChild(span);
-        termLog.scrollTop = termLog.scrollHeight;
+        $span.html(`[${timeStr}] ${typeSpan} ${message}<br>`);
+        termLog.append($span);
+        termLog.scrollTop(termLog[0].scrollHeight);
     }
 
     function pulseNode(nodeId, type) {
         const selector = `#${nodeId} circle, #${nodeId} path, #${nodeId} ellipse`;
-        const elements = document.querySelectorAll(selector);
+        const $elements = $(selector);
         const className = `pulse-${type}`;
         
-        elements.forEach(el => {
-            el.classList.add(className);
-            const timeoutId = setTimeout(() => {
-                el.classList.remove(className);
-            }, 300);
-            simTimeouts.push(timeoutId);
-        });
+        $elements.addClass(className);
+        const timeoutId = setTimeout(() => {
+            $elements.removeClass(className);
+        }, 300);
+        simTimeouts.push(timeoutId);
     }
 
     function resetSimulation() {
@@ -820,39 +783,35 @@ function initSimulator() {
         grpcTimeElapsed = 0;
 
         // Reset progress counters in UI
-        if (restBar) restBar.style.width = '0%';
-        if (grpcBar) grpcBar.style.width = '0%';
-        document.getElementById('sim-rest-pct').textContent = '0%';
-        document.getElementById('sim-grpc-pct').textContent = '0%';
+        if (restBar.length) restBar.css('width', '0%');
+        if (grpcBar.length) grpcBar.css('width', '0%');
+        $('#sim-rest-pct').text('0%');
+        $('#sim-grpc-pct').text('0%');
 
-        restTimeEl.textContent = '0 ms';
-        restDoneEl.textContent = '0/0 req';
-        grpcTimeEl.textContent = '0 ms';
-        grpcDoneEl.textContent = '0/0 req';
+        restTimeEl.text('0 ms');
+        restDoneEl.text('0/0 req');
+        grpcTimeEl.text('0 ms');
+        grpcDoneEl.text('0/0 req');
 
-        document.getElementById('sim-rest-conns').textContent = '0';
-        document.getElementById('sim-grpc-conns').textContent = '0';
-        document.getElementById('sim-rest-bandwidth').textContent = '0.0 KB';
-        document.getElementById('sim-grpc-bandwidth').textContent = '0.0 KB';
+        $('#sim-rest-conns').text('0');
+        $('#sim-grpc-conns').text('0');
+        $('#sim-rest-bandwidth').text('0.0 KB');
+        $('#sim-grpc-bandwidth').text('0.0 KB');
 
-        if (restQueueText) {
-            restQueueText.textContent = 'Queue: 0';
-            restQueueText.classList.add('hidden');
+        if (restQueueText.length) {
+            restQueueText.text('Queue: 0').addClass('hidden');
         }
 
         // Remove active glows from payload boxes
-        const restBlock = document.getElementById('rest-payload-block');
-        const grpcBlock = document.getElementById('grpc-payload-block');
-        if (restBlock) restBlock.classList.remove('glow-active-rest');
-        if (grpcBlock) grpcBlock.classList.remove('glow-active-grpc');
+        $('#rest-payload-block').removeClass('glow-active-rest');
+        $('#grpc-payload-block').removeClass('glow-active-grpc');
 
         // Reset SVG packets container
-        const packetContainer = document.getElementById('packet-container');
-        if (packetContainer) packetContainer.innerHTML = '';
+        $('#packet-container').empty();
 
         // Reset status
-        statusLabel.textContent = 'Ready';
-        termLog.innerHTML = `<span class="text-emerald-400">[SYS]</span> Simulation reset. Select concurrency and run again.<br>`;
+        statusLabel.text('Ready');
+        termLog.html(`<span class="text-emerald-400">[SYS]</span> Simulation reset. Select concurrency and run again.<br>`);
     }
 
     function runSimulation() {
@@ -861,10 +820,10 @@ function initSimulator() {
         simulatorRunning = true;
         restRunning = true;
         grpcRunning = true;
-        statusLabel.textContent = 'Running';
+        statusLabel.text('Running');
 
-        const target = parseInt(concurrencySel.value) || 100;
-        const speed = parseFloat(speedSel.value) || 1.0;
+        const target = parseInt(concurrencySel.val()) || 100;
+        const speed = parseFloat(speedSel.val()) || 1.0;
         const cIdx = benchmarkData.concurrency.indexOf(target);
 
         // Fetch latency and throughput based on user parameters
@@ -883,7 +842,7 @@ function initSimulator() {
 
         restActiveConns = 0;
         grpcActiveConns = 1;
-        document.getElementById('sim-grpc-conns').textContent = '1';
+        $('#sim-grpc-conns').text('1');
 
         // 1. Tick Interval: Increments stats based on real-time speeds
         const tickInterval = setInterval(() => {
@@ -901,16 +860,16 @@ function initSimulator() {
 
                 // Update REST stats
                 const pct = Math.floor((restCompleted / target) * 100);
-                if (restBar) restBar.style.width = `${pct}%`;
-                document.getElementById('sim-rest-pct').textContent = `${pct}%`;
-                restDoneEl.textContent = `${Math.floor(restCompleted)}/${target} req`;
-                restTimeEl.textContent = `${Math.floor(restTimeElapsed)} ms`;
-                document.getElementById('sim-rest-bandwidth').textContent = `${restBandwidth.toFixed(1)} KB`;
+                if (restBar.length) restBar.css('width', `${pct}%`);
+                $('#sim-rest-pct').text(`${pct}%`);
+                restDoneEl.text(`${Math.floor(restCompleted)}/${target} req`);
+                restTimeEl.text(`${Math.floor(restTimeElapsed)} ms`);
+                $('#sim-rest-bandwidth').text(`${restBandwidth.toFixed(1)} KB`);
 
                 if (restCompleted >= target) {
                     restRunning = false;
                     restActiveConns = 0;
-                    document.getElementById('sim-rest-conns').textContent = '0';
+                    $('#sim-rest-conns').text('0');
                     logToTerminal(`REST API simulasi selesai! Total waktu: ${Math.floor(restTimeElapsed)} ms. Bandwidth: ${restBandwidth.toFixed(1)} KB`, 'rest');
                 }
             }
@@ -927,16 +886,16 @@ function initSimulator() {
 
                 // Update gRPC stats
                 const pct = Math.floor((grpcCompleted / target) * 100);
-                if (grpcBar) grpcBar.style.width = `${pct}%`;
-                document.getElementById('sim-grpc-pct').textContent = `${pct}%`;
-                grpcDoneEl.textContent = `${Math.floor(grpcCompleted)}/${target} req`;
-                grpcTimeEl.textContent = `${Math.floor(grpcTimeElapsed)} ms`;
-                document.getElementById('sim-grpc-bandwidth').textContent = `${grpcBandwidth.toFixed(1)} KB`;
+                if (grpcBar.length) grpcBar.css('width', `${pct}%`);
+                $('#sim-grpc-pct').text(`${pct}%`);
+                grpcDoneEl.text(`${Math.floor(grpcCompleted)}/${target} req`);
+                grpcTimeEl.text(`${Math.floor(grpcTimeElapsed)} ms`);
+                $('#sim-grpc-bandwidth').text(`${grpcBandwidth.toFixed(1)} KB`);
 
                 if (grpcCompleted >= target) {
                     grpcRunning = false;
                     grpcActiveConns = 0;
-                    document.getElementById('sim-grpc-conns').textContent = '0';
+                    $('#sim-grpc-conns').text('0');
                     logToTerminal(`gRPC simulasi selesai! Total waktu: ${Math.floor(grpcTimeElapsed)} ms. Bandwidth: ${grpcBandwidth.toFixed(1)} KB`, 'grpc');
                 }
             }
@@ -944,7 +903,7 @@ function initSimulator() {
             // Check simulation completion
             if (!restRunning && !grpcRunning) {
                 clearInterval(tickInterval);
-                statusLabel.textContent = 'Finished';
+                statusLabel.text('Finished');
                 simulatorRunning = false;
 
                 // Output final comparative analysis to terminal
@@ -981,7 +940,7 @@ function initSimulator() {
     }
 
     function sendRestRequest() {
-        const userId = payloadIdInp ? payloadIdInp.value : 'USR-9988223';
+        const userId = payloadIdInp.length ? payloadIdInp.val() : 'USR-9988223';
         
         if (restActiveConns < 6) {
             // Find available path index (0-5)
@@ -990,309 +949,311 @@ function initSimulator() {
 
             restPathsOccupied[pathIdx] = true;
             restActiveConns++;
-            document.getElementById('sim-rest-conns').textContent = restActiveConns;
+            $('#sim-rest-conns').text(restActiveConns);
 
-            // Trigger packet anim from Client to Server
-            const packet = document.createElementNS(svgNS, 'circle');
-            packet.setAttribute('r', '5.5');
-            packet.setAttribute('fill', 'url(#rest-grad)');
-            packet.setAttribute('class', 'packet rest-packet');
-            packet.setAttribute('filter', 'url(#glow-rest)');
+            // Trigger packet anim from Client to Server using jQuery wrapper for SVG
+            const $packet = $(document.createElementNS(svgNS, 'circle')).attr({
+                r: '5.5',
+                fill: 'url(#rest-grad)',
+                class: 'packet rest-packet',
+                filter: 'url(#glow-rest)'
+            });
 
-            const motion = document.createElementNS(svgNS, 'animateMotion');
-            motion.setAttribute('dur', `${400 / parseFloat(speedSel.value)}ms`);
-            motion.setAttribute('repeatCount', '1');
-            motion.setAttribute('fill', 'freeze');
+            const $motion = $(document.createElementNS(svgNS, 'animateMotion')).attr({
+                dur: `${400 / parseFloat(speedSel.val())}ms`,
+                repeatCount: '1',
+                fill: 'freeze'
+            });
 
-            const mpath = document.createElementNS(svgNS, 'mpath');
-            mpath.setAttribute('href', `#path-rest-${pathIdx}`);
-            motion.appendChild(mpath);
-            packet.appendChild(motion);
-
-            const container = document.getElementById('packet-container');
-            if (container) container.appendChild(packet);
+            const $mpath = $(document.createElementNS(svgNS, 'mpath')).attr('href', `#path-rest-${pathIdx}`);
+            $motion.append($mpath);
+            $packet.append($motion);
+            $('#packet-container').append($packet);
 
             // Step 1 timeout: Client -> Server
             const t1 = setTimeout(() => {
                 pulseNode('node-rest-server', 'rest');
-                const restBlock = document.getElementById('rest-payload-block');
-                if (restBlock) {
-                    restBlock.classList.add('glow-active-rest');
-                    const tGlow = setTimeout(() => restBlock.classList.remove('glow-active-rest'), 350 / parseFloat(speedSel.value));
+                const $restBlock = $('#rest-payload-block');
+                if ($restBlock.length) {
+                    $restBlock.addClass('glow-active-rest');
+                    const tGlow = setTimeout(() => $restBlock.removeClass('glow-active-rest'), 350 / parseFloat(speedSel.val()));
                     simTimeouts.push(tGlow);
                 }
                 logToTerminal(`Conn #${pathIdx+1}: HTTP GET request diterima Server. Mengambil data dari DB...`, 'rest');
                 
                 // Remove client packet
-                packet.remove();
+                $packet.remove();
 
                 // DB hop query packet
-                const dbPack = document.createElementNS(svgNS, 'circle');
-                dbPack.setAttribute('r', '4');
-                dbPack.setAttribute('fill', '#fbbf24');
-                dbPack.setAttribute('class', 'packet');
+                const $dbPack = $(document.createElementNS(svgNS, 'circle')).attr({
+                    r: '4',
+                    fill: '#fbbf24',
+                    class: 'packet'
+                });
 
-                const dbMotion = document.createElementNS(svgNS, 'animateMotion');
-                dbMotion.setAttribute('dur', `${200 / parseFloat(speedSel.value)}ms`);
-                dbMotion.setAttribute('repeatCount', '1');
-                dbMotion.setAttribute('fill', 'freeze');
+                const $dbMotion = $(document.createElementNS(svgNS, 'animateMotion')).attr({
+                    dur: `${200 / parseFloat(speedSel.val())}ms`,
+                    repeatCount: '1',
+                    fill: 'freeze'
+                });
                 
-                const dbMpath = document.createElementNS(svgNS, 'mpath');
-                dbMpath.setAttribute('href', '#path-rest-db');
-                dbMotion.appendChild(dbMpath);
-                dbPack.appendChild(dbMotion);
-                if (container) container.appendChild(dbPack);
+                const $dbMpath = $(document.createElementNS(svgNS, 'mpath')).attr('href', '#path-rest-db');
+                $dbMotion.append($dbMpath);
+                $dbPack.append($dbMotion);
+                $('#packet-container').append($dbPack);
 
                 // Step 2 timeout: Server -> DB
                 const t2 = setTimeout(() => {
                     pulseNode('node-rest-db', 'db');
                     logToTerminal(`Conn #${pathIdx+1}: Database query: <span class="text-yellow-500">SELECT * FROM users WHERE id = '${userId}';</span>`, 'rest');
                     
-                    dbPack.remove();
+                    $dbPack.remove();
 
                     // DB hop response packet (reverse path)
-                    const dbRespPack = document.createElementNS(svgNS, 'circle');
-                    dbRespPack.setAttribute('r', '4');
-                    dbRespPack.setAttribute('fill', '#fbbf24');
-                    dbRespPack.setAttribute('class', 'packet');
+                    const $dbRespPack = $(document.createElementNS(svgNS, 'circle')).attr({
+                        r: '4',
+                        fill: '#fbbf24',
+                        class: 'packet'
+                    });
 
-                    const dbRespMotion = document.createElementNS(svgNS, 'animateMotion');
-                    dbRespMotion.setAttribute('dur', `${200 / parseFloat(speedSel.value)}ms`);
-                    dbRespMotion.setAttribute('repeatCount', '1');
-                    dbRespMotion.setAttribute('fill', 'freeze');
-                    dbRespMotion.setAttribute('keyPoints', '1;0');
-                    dbRespMotion.setAttribute('keyTimes', '0;1');
-                    dbRespMotion.setAttribute('calcMode', 'linear');
+                    const $dbRespMotion = $(document.createElementNS(svgNS, 'animateMotion')).attr({
+                        dur: `${200 / parseFloat(speedSel.val())}ms`,
+                        repeatCount: '1',
+                        fill: 'freeze',
+                        keyPoints: '1;0',
+                        keyTimes: '0;1',
+                        calcMode: 'linear'
+                    });
                     
-                    const dbRespMpath = document.createElementNS(svgNS, 'mpath');
-                    dbRespMpath.setAttribute('href', '#path-rest-db');
-                    dbRespMotion.appendChild(dbRespMpath);
-                    dbRespPack.appendChild(dbRespMotion);
-                    if (container) container.appendChild(dbRespPack);
+                    const $dbRespMpath = $(document.createElementNS(svgNS, 'mpath')).attr('href', '#path-rest-db');
+                    $dbRespMotion.append($dbRespMpath);
+                    $dbRespPack.append($dbRespMotion);
+                    $('#packet-container').append($dbRespPack);
 
                     // Step 3 timeout: DB -> Server
                     const t3 = setTimeout(() => {
                         pulseNode('node-rest-server', 'rest');
                         logToTerminal(`Conn #${pathIdx+1}: Data ditemukan. Server menyusun payload JSON (${window.currentPayloadSizes.rest} Bytes)...`, 'rest');
                         
-                        dbRespPack.remove();
+                        $dbRespPack.remove();
 
                         // Response packet Server -> Client (reverse along same connection line)
-                        const respPack = document.createElementNS(svgNS, 'circle');
-                        respPack.setAttribute('r', '5.5');
-                        respPack.setAttribute('fill', 'url(#rest-grad)');
-                        respPack.setAttribute('class', 'packet rest-packet');
-                        respPack.setAttribute('filter', 'url(#glow-rest)');
+                        const $respPack = $(document.createElementNS(svgNS, 'circle')).attr({
+                            r: '5.5',
+                            fill: 'url(#rest-grad)',
+                            class: 'packet rest-packet',
+                            filter: 'url(#glow-rest)'
+                        });
 
-                        const respMotion = document.createElementNS(svgNS, 'animateMotion');
-                        respMotion.setAttribute('dur', `${400 / parseFloat(speedSel.value)}ms`);
-                        respMotion.setAttribute('repeatCount', '1');
-                        respMotion.setAttribute('fill', 'freeze');
-                        respMotion.setAttribute('keyPoints', '1;0');
-                        respMotion.setAttribute('keyTimes', '0;1');
-                        respMotion.setAttribute('calcMode', 'linear');
+                        const $respMotion = $(document.createElementNS(svgNS, 'animateMotion')).attr({
+                            dur: `${400 / parseFloat(speedSel.val())}ms`,
+                            repeatCount: '1',
+                            fill: 'freeze',
+                            keyPoints: '1;0',
+                            keyTimes: '0;1',
+                            calcMode: 'linear'
+                        });
 
-                        const respMpath = document.createElementNS(svgNS, 'mpath');
-                        respMpath.setAttribute('href', `#path-rest-${pathIdx}`);
-                        respMotion.appendChild(respMpath);
-                        respPack.appendChild(respMotion);
-                        if (container) container.appendChild(respPack);
+                        const $respMpath = $(document.createElementNS(svgNS, 'mpath')).attr('href', `#path-rest-${pathIdx}`);
+                        $respMotion.append($respMpath);
+                        $respPack.append($respMotion);
+                        $('#packet-container').append($respPack);
 
                         // Step 4 timeout: Server -> Client
                         const t4 = setTimeout(() => {
                             pulseNode('node-rest-client', 'rest');
                             logToTerminal(`Conn #${pathIdx+1}: Response diterima Client. <span class="text-rose-400">200 OK</span> (${window.currentPayloadSizes.rest} Bytes)`, 'rest');
                             
-                            respPack.remove();
+                            $respPack.remove();
 
                             // Free connection slot
                             restPathsOccupied[pathIdx] = false;
                             restActiveConns = Math.max(0, restActiveConns - 1);
-                            document.getElementById('sim-rest-conns').textContent = restActiveConns;
+                            $('#sim-rest-conns').text(restActiveConns);
 
                             // Check queue to process next
                             if (restQueueCount > 0) {
                                 restQueueCount--;
                                 if (restQueueCount > 0) {
-                                    restQueueText.textContent = `Queue: ${restQueueCount}`;
+                                    restQueueText.text(`Queue: ${restQueueCount}`);
                                 } else {
-                                    restQueueText.classList.add('hidden');
+                                    restQueueText.addClass('hidden');
                                 }
                                 sendRestRequest();
                             }
-                        }, 400 / parseFloat(speedSel.value));
+                        }, 400 / parseFloat(speedSel.val()));
                         simTimeouts.push(t4);
 
-                    }, 200 / parseFloat(speedSel.value));
+                    }, 200 / parseFloat(speedSel.val()));
                     simTimeouts.push(t3);
 
-                }, 200 / parseFloat(speedSel.value));
+                }, 200 / parseFloat(speedSel.val()));
                 simTimeouts.push(t2);
 
-            }, 400 / parseFloat(speedSel.value));
+            }, 400 / parseFloat(speedSel.val()));
             simTimeouts.push(t1);
 
         } else {
             // Queue request
             restQueueCount++;
-            restQueueText.textContent = `Queue: ${restQueueCount}`;
-            restQueueText.classList.remove('hidden');
+            restQueueText.text(`Queue: ${restQueueCount}`).removeClass('hidden');
             logToTerminal(`Batas koneksi tercapai (6/6). Request diantrekan (Queue size: ${restQueueCount}) [Head-of-Line Blocking]`, 'warn');
         }
     }
 
     function sendGrpcRequest() {
-        const userId = payloadIdInp ? payloadIdInp.value : 'USR-9988223';
-        const container = document.getElementById('packet-container');
+        const userId = payloadIdInp.length ? payloadIdInp.val() : 'USR-9988223';
 
         // Generate odd Stream ID (e.g. S1, S3, S5...)
         const streamId = 2 * Math.floor(Math.random() * 50) + 1;
 
-        // Group containing circle and text label
-        const packetG = document.createElementNS(svgNS, 'g');
-        packetG.setAttribute('class', 'packet grpc-packet');
+        // Group containing circle and text label using jQuery
+        const $packetG = $(document.createElementNS(svgNS, 'g')).attr('class', 'packet grpc-packet');
 
-        const circle = document.createElementNS(svgNS, 'circle');
-        circle.setAttribute('r', '5.5');
-        circle.setAttribute('fill', 'url(#grpc-grad)');
-        circle.setAttribute('filter', 'url(#glow-grpc)');
-        packetG.appendChild(circle);
+        const $circle = $(document.createElementNS(svgNS, 'circle')).attr({
+            r: '5.5',
+            fill: 'url(#grpc-grad)',
+            filter: 'url(#glow-grpc)'
+        });
+        $packetG.append($circle);
 
-        const text = document.createElementNS(svgNS, 'text');
-        text.setAttribute('text-anchor', 'middle');
-        text.setAttribute('y', '-9');
-        text.setAttribute('fill', '#22d3ee');
-        text.setAttribute('font-family', 'Outfit');
-        text.setAttribute('font-size', '7px');
-        text.setAttribute('font-weight', 'bold');
-        text.textContent = `S${streamId}`;
-        packetG.appendChild(text);
+        const $text = $(document.createElementNS(svgNS, 'text')).attr({
+            'text-anchor': 'middle',
+            y: '-9',
+            fill: '#22d3ee',
+            'font-family': 'Outfit',
+            'font-size': '7px',
+            'font-weight': 'bold'
+        }).text(`S${streamId}`);
+        $packetG.append($text);
 
-        const motion = document.createElementNS(svgNS, 'animateMotion');
-        motion.setAttribute('dur', `${400 / parseFloat(speedSel.value)}ms`);
-        motion.setAttribute('repeatCount', '1');
-        motion.setAttribute('fill', 'freeze');
+        const $motion = $(document.createElementNS(svgNS, 'animateMotion')).attr({
+            dur: `${400 / parseFloat(speedSel.val())}ms`,
+            repeatCount: '1',
+            fill: 'freeze'
+        });
 
-        const mpath = document.createElementNS(svgNS, 'mpath');
-        mpath.setAttribute('href', '#path-grpc-line');
-        motion.appendChild(mpath);
-        packetG.appendChild(motion);
+        const $mpath = $(document.createElementNS(svgNS, 'mpath')).attr('href', '#path-grpc-line');
+        $motion.append($mpath);
+        $packetG.append($motion);
 
-        if (container) container.appendChild(packetG);
+        $('#packet-container').append($packetG);
 
         // Step 1: Client -> Server multiplexed
         const t1 = setTimeout(() => {
             pulseNode('node-grpc-server', 'grpc');
-            const grpcBlock = document.getElementById('grpc-payload-block');
-            if (grpcBlock) {
-                grpcBlock.classList.add('glow-active-grpc');
-                const tGlow = setTimeout(() => grpcBlock.classList.remove('glow-active-grpc'), 350 / parseFloat(speedSel.value));
+            const $grpcBlock = $('#grpc-payload-block');
+            if ($grpcBlock.length) {
+                $grpcBlock.addClass('glow-active-grpc');
+                const tGlow = setTimeout(() => $grpcBlock.removeClass('glow-active-grpc'), 350 / parseFloat(speedSel.val()));
                 simTimeouts.push(tGlow);
             }
             logToTerminal(`Stream #${streamId}: Frame HEADERS & DATA biner diterima gRPC Server.`, 'grpc');
 
-            packetG.remove();
+            $packetG.remove();
 
             // DB Hop query packet
-            const dbPack = document.createElementNS(svgNS, 'circle');
-            dbPack.setAttribute('r', '4');
-            dbPack.setAttribute('fill', '#fbbf24');
-            dbPack.setAttribute('class', 'packet');
+            const $dbPack = $(document.createElementNS(svgNS, 'circle')).attr({
+                r: '4',
+                fill: '#fbbf24',
+                class: 'packet'
+            });
 
-            const dbMotion = document.createElementNS(svgNS, 'animateMotion');
-            dbMotion.setAttribute('dur', `${200 / parseFloat(speedSel.value)}ms`);
-            dbMotion.setAttribute('repeatCount', '1');
-            dbMotion.setAttribute('fill', 'freeze');
+            const $dbMotion = $(document.createElementNS(svgNS, 'animateMotion')).attr({
+                dur: `${200 / parseFloat(speedSel.val())}ms`,
+                repeatCount: '1',
+                fill: 'freeze'
+            });
             
-            const dbMpath = document.createElementNS(svgNS, 'mpath');
-            dbMpath.setAttribute('href', '#path-grpc-db');
-            dbMotion.appendChild(dbMpath);
-            dbPack.appendChild(dbMotion);
-            if (container) container.appendChild(dbPack);
+            const $dbMpath = $(document.createElementNS(svgNS, 'mpath')).attr('href', '#path-grpc-db');
+            $dbMotion.append($dbMpath);
+            $dbPack.append($dbMotion);
+            $('#packet-container').append($dbPack);
 
             // Step 2: Server -> DB
             const t2 = setTimeout(() => {
                 pulseNode('node-grpc-db', 'db');
                 logToTerminal(`Stream #${streamId}: DB Query: <span class="text-yellow-500">SELECT * FROM users WHERE id = '${userId}';</span>`, 'grpc');
                 
-                dbPack.remove();
+                $dbPack.remove();
 
                 // DB hop response
-                const dbRespPack = document.createElementNS(svgNS, 'circle');
-                dbRespPack.setAttribute('r', '4');
-                dbRespPack.setAttribute('fill', '#fbbf24');
-                dbRespPack.setAttribute('class', 'packet');
+                const $dbRespPack = $(document.createElementNS(svgNS, 'circle')).attr({
+                    r: '4',
+                    fill: '#fbbf24',
+                    class: 'packet'
+                });
 
-                const dbRespMotion = document.createElementNS(svgNS, 'animateMotion');
-                dbRespMotion.setAttribute('dur', `${200 / parseFloat(speedSel.value)}ms`);
-                dbRespMotion.setAttribute('repeatCount', '1');
-                dbRespMotion.setAttribute('fill', 'freeze');
-                dbRespMotion.setAttribute('keyPoints', '1;0');
-                dbRespMotion.setAttribute('keyTimes', '0;1');
-                dbRespMotion.setAttribute('calcMode', 'linear');
+                const $dbRespMotion = $(document.createElementNS(svgNS, 'animateMotion')).attr({
+                    dur: `${200 / parseFloat(speedSel.val())}ms`,
+                    repeatCount: '1',
+                    fill: 'freeze',
+                    keyPoints: '1;0',
+                    keyTimes: '0;1',
+                    calcMode: 'linear'
+                });
                 
-                const dbRespMpath = document.createElementNS(svgNS, 'mpath');
-                dbRespMpath.setAttribute('href', '#path-grpc-db');
-                dbRespMotion.appendChild(dbRespMpath);
-                dbRespPack.appendChild(dbRespMotion);
-                if (container) container.appendChild(dbRespPack);
+                const $dbRespMpath = $(document.createElementNS(svgNS, 'mpath')).attr('href', '#path-grpc-db');
+                $dbRespMotion.append($dbRespMpath);
+                $dbRespPack.append($dbRespMotion);
+                $('#packet-container').append($dbRespPack);
 
                 // Step 3: DB -> Server
                 const t3 = setTimeout(() => {
                     pulseNode('node-grpc-server', 'grpc');
                     logToTerminal(`Stream #${streamId}: Menghasilkan biner Protobuf (${window.currentPayloadSizes.grpc} Bytes)...`, 'grpc');
                     
-                    dbRespPack.remove();
+                    $dbRespPack.remove();
 
                     // Response group Server -> Client multiplexed
-                    const respG = document.createElementNS(svgNS, 'g');
-                    respG.setAttribute('class', 'packet grpc-packet');
+                    const $respG = $(document.createElementNS(svgNS, 'g')).attr('class', 'packet grpc-packet');
 
-                    const respCircle = document.createElementNS(svgNS, 'circle');
-                    respCircle.setAttribute('r', '5.5');
-                    respCircle.setAttribute('fill', 'url(#grpc-grad)');
-                    respCircle.setAttribute('filter', 'url(#glow-grpc)');
-                    respG.appendChild(respCircle);
+                    const $respCircle = $(document.createElementNS(svgNS, 'circle')).attr({
+                        r: '5.5',
+                        fill: 'url(#grpc-grad)',
+                        filter: 'url(#glow-grpc)'
+                    });
+                    $respG.append($respCircle);
 
-                    const respText = document.createElementNS(svgNS, 'text');
-                    respText.setAttribute('text-anchor', 'middle');
-                    respText.setAttribute('y', '-9');
-                    respText.setAttribute('fill', '#22d3ee');
-                    respText.setAttribute('font-family', 'Outfit');
-                    respText.setAttribute('font-size', '7px');
-                    respText.setAttribute('font-weight', 'bold');
-                    respText.textContent = `S${streamId}`;
-                    respG.appendChild(respText);
+                    const $respText = $(document.createElementNS(svgNS, 'text')).attr({
+                        'text-anchor': 'middle',
+                        y: '-9',
+                        fill: '#22d3ee',
+                        'font-family': 'Outfit',
+                        'font-size': '7px',
+                        'font-weight': 'bold'
+                    }).text(`S${streamId}`);
+                    $respG.append($respText);
 
-                    const respMotion = document.createElementNS(svgNS, 'animateMotion');
-                    respMotion.setAttribute('dur', `${400 / parseFloat(speedSel.value)}ms`);
-                    respMotion.setAttribute('repeatCount', '1');
-                    respMotion.setAttribute('fill', 'freeze');
-                    respMotion.setAttribute('keyPoints', '1;0');
-                    respMotion.setAttribute('keyTimes', '0;1');
-                    respMotion.setAttribute('calcMode', 'linear');
+                    const $respMotion = $(document.createElementNS(svgNS, 'animateMotion')).attr({
+                        dur: `${400 / parseFloat(speedSel.val())}ms`,
+                        repeatCount: '1',
+                        fill: 'freeze',
+                        keyPoints: '1;0',
+                        keyTimes: '0;1',
+                        calcMode: 'linear'
+                    });
 
-                    const respMpath = document.createElementNS(svgNS, 'mpath');
-                    respMpath.setAttribute('href', '#path-grpc-line');
-                    respMotion.appendChild(respMpath);
-                    respG.appendChild(respMotion);
-                    if (container) container.appendChild(respG);
+                    const $respMpath = $(document.createElementNS(svgNS, 'mpath')).attr('href', '#path-grpc-line');
+                    $respMotion.append($respMpath);
+                    $respG.append($respMotion);
+                    $('#packet-container').append($respG);
 
                     // Step 4: Server -> Client
                     const t4 = setTimeout(() => {
                         pulseNode('node-grpc-client', 'grpc');
                         logToTerminal(`Stream #${streamId}: Frame DATA diterima. status: <span class="text-cyan-400">HEADERS(200) + DATA(${window.currentPayloadSizes.grpc} B)</span>`, 'grpc');
-                        respG.remove();
-                    }, 400 / parseFloat(speedSel.value));
+                        $respG.remove();
+                    }, 400 / parseFloat(speedSel.val()));
                     simTimeouts.push(t4);
 
-                }, 200 / parseFloat(speedSel.value));
+                }, 200 / parseFloat(speedSel.val()));
                 simTimeouts.push(t3);
 
-            }, 200 / parseFloat(speedSel.value));
+            }, 200 / parseFloat(speedSel.val()));
             simTimeouts.push(t2);
 
-        }, 400 / parseFloat(speedSel.value));
+        }, 400 / parseFloat(speedSel.val()));
         simTimeouts.push(t1);
     }
 }
